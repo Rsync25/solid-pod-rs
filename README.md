@@ -1,9 +1,14 @@
 # solid-pod-rs
 
-**A Rust-native Solid Pod server.** LDP resources and containers, Web
-Access Control, WebID profiles, Solid Notifications 0.2, Solid-OIDC,
-and NIP-98 HTTP authentication — delivered as a framework-agnostic
-library crate and a drop-in server binary.
+**A Rust-native port of
+[JavaScriptSolidServer](https://github.com/JavaScriptSolidServer/JavaScriptSolidServer)
+(JSS).** JSS is the reference implementation of the
+[Solid Protocol](https://solidproject.org/TR/protocol) — LDP resources
+and containers, Web Access Control, WebID profiles, Solid Notifications,
+Solid-OIDC, ActivityPub federation, an embedded identity provider, Git
+HTTP backend, NIP-98 authentication, and more. solid-pod-rs tracks the
+full JSS feature surface (~98 % strict parity) and delivers it as a
+framework-agnostic Rust library crate and a drop-in server binary.
 
 [![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](./LICENSE)
 [![crates.io](https://img.shields.io/crates/v/solid-pod-rs.svg)](https://crates.io/crates/solid-pod-rs)
@@ -11,34 +16,40 @@ library crate and a drop-in server binary.
 [![CI](https://github.com/dreamlab-ai/solid-pod-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/dreamlab-ai/solid-pod-rs/actions/workflows/ci.yml)
 [![MSRV: 1.75](https://img.shields.io/badge/MSRV-1.75-lightgray.svg)](https://releases.rs/docs/1.75.0/)
 
+> **Upstream:** [JavaScriptSolidServer (JSS)](https://github.com/JavaScriptSolidServer/JavaScriptSolidServer) — the AGPL-3.0 reference implementation of the [Solid Protocol](https://solidproject.org/TR/protocol).
+> This crate is a Rust port of JSS; see the upstream repo for the canonical feature set, issue tracker, and protocol discussion.
+
 ---
 
 ## Overview
 
-solid-pod-rs is a Rust implementation of the server side of the
-[Solid Protocol](https://solidproject.org/TR/protocol). It ships the
-full set of protocol primitives — LDP resources and containers, Web
-Access Control (WAC), WebID profile documents, Solid Notifications
-0.2, Solid-OIDC 0.1, and NIP-98 HTTP authentication — as a
-framework-agnostic library crate. Consumers wire the library into
-actix-web, axum, hyper, or any other HTTP runtime; the crate has no
-opinions about how requests reach it.
+solid-pod-rs is a Rust port of
+[JavaScriptSolidServer](https://github.com/JavaScriptSolidServer/JavaScriptSolidServer)
+(JSS), the AGPL-3.0 reference implementation of the
+[Solid Protocol](https://solidproject.org/TR/protocol). JSS itself
+implements the full Solid spec surface — LDP resources and containers,
+Web Access Control (WAC), WebID profile documents, Solid Notifications
+0.2, Solid-OIDC 0.1, and NIP-98 HTTP authentication — and extends it
+with ActivityPub federation, an embedded OIDC identity provider, a Git
+HTTP backend, Nostr relay integration, and Passkey/Schnorr SSO. This
+crate tracks all of that as a framework-agnostic Rust library.
+Consumers wire it into actix-web, axum, hyper, or any other HTTP
+runtime; the crate has no opinions about how requests reach it.
 
 Operators who want a turnkey deployment use the sibling binary crate
 `solid-pod-rs-server`: a thin actix-web shell over the library,
 wired to a JSS-compatible layered configuration loader and a CLI
-that reads the same `JSS_*` environment variables as the reference
-JavaScript server. One `cargo install` command is sufficient to run
-a conforming pod.
+that reads the same `JSS_*` environment variables as JSS. One
+`cargo install` command is sufficient to run a conforming pod.
 
 The target audience is Rust developers building sovereign-data
-applications, Solid ecosystem implementers who want a native backend
-without a Node.js runtime dependency, and operators porting Solid
-deployments to compiled-language environments — edge runtimes,
-embedded servers, single-binary IoT devices. Feature flags keep the
-dependency surface tight: a minimal NIP-98-only build fits in under
-200 KB of transitive deps; a full OIDC + S3 + notifications build
-stays under 40 MB.
+applications, JSS operators who want a native backend without a
+Node.js runtime dependency, and teams porting Solid deployments to
+compiled-language environments — edge runtimes, embedded servers,
+single-binary IoT devices. Feature flags keep the dependency surface
+tight: a minimal NIP-98-only build fits in under 200 KB of
+transitive deps; a full OIDC + S3 + notifications build stays
+under 40 MB.
 
 ---
 
