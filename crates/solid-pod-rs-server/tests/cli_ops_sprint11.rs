@@ -157,7 +157,7 @@ async fn cli_account_delete_requires_confirmation_without_yes_flag() {
             "alice@example.com",
             "https://alice.example/profile#me",
             None,
-            "pw",
+            "password",
         )
         .unwrap();
 
@@ -203,7 +203,7 @@ async fn cli_account_delete_with_yes_removes_account() {
             "zed@example.com",
             "https://zed.example/profile#me",
             None,
-            "pw",
+            "password",
         )
         .unwrap();
 

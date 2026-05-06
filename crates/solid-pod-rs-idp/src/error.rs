@@ -28,6 +28,14 @@ pub enum ProviderError {
     #[error("client document: {0}")]
     ClientDocument(String),
 
+    /// Password does not meet the minimum length requirement.
+    /// JSS commit `1feead2` enforces >= 8 characters at registration.
+    #[error("password must be at least {min_length} characters")]
+    PasswordTooShort {
+        /// The minimum length that was not met.
+        min_length: usize,
+    },
+
     /// Rate limit tripped.
     #[error("rate limited (retry after {retry_after_secs}s)")]
     RateLimited {
@@ -65,7 +73,7 @@ impl ProviderError {
     /// OAuth2 error response, RFC 6749 §5.2).
     pub fn code(&self) -> &'static str {
         match self {
-            Self::InvalidRequest(_) => "invalid_request",
+            Self::InvalidRequest(_) | Self::PasswordTooShort { .. } => "invalid_request",
             Self::InvalidGrant(_) => "invalid_grant",
             Self::InvalidClient(_) => "invalid_client",
             Self::InvalidDpop(_) => "invalid_dpop_proof",

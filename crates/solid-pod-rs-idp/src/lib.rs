@@ -71,7 +71,9 @@ pub mod schnorr;
 #[cfg(feature = "axum-binder")]
 pub mod axum_binder;
 
-pub use credentials::{login, CredentialsResponse, LoginError};
+pub use credentials::{
+    login, validate_password_length, CredentialsResponse, LoginError, MIN_PASSWORD_LENGTH,
+};
 pub use discovery::{build_discovery, DiscoveryDocument};
 pub use error::ProviderError;
 pub use invites::{

@@ -122,6 +122,10 @@ async fn credentials_handler(
         ),
         LoginError::InvalidGrant => AxumErr(StatusCode::UNAUTHORIZED, "invalid_grant".into()),
         LoginError::InvalidRequest(m) => AxumErr(StatusCode::BAD_REQUEST, m),
+        LoginError::PasswordTooShort { min_length } => AxumErr(
+            StatusCode::BAD_REQUEST,
+            format!("password must be at least {min_length} characters"),
+        ),
         other => AxumErr(StatusCode::INTERNAL_SERVER_ERROR, other.to_string()),
     })?;
 

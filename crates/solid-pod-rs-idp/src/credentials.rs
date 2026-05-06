@@ -25,6 +25,11 @@ use crate::jwks::Jwks;
 use crate::tokens::{issue_access_token, AccessToken};
 use crate::user_store::{User, UserStore};
 
+/// Minimum password length enforced at registration time.
+/// Mirrors JSS commit `1feead2` which rejects passwords shorter than
+/// 8 characters.
+pub const MIN_PASSWORD_LENGTH: usize = 8;
+
 /// Rate-limit route name we share with the rest of the crate. JSS
 /// mirrors this as `/idp/credentials` — we drop the path prefix and
 /// use the canonical name so operator metrics don't need to strip.
@@ -44,6 +49,14 @@ pub enum LoginError {
     /// `{"error":"invalid_grant"}` with HTTP 401.
     #[error("invalid credentials")]
     InvalidGrant,
+
+    /// Password does not meet the minimum length requirement.
+    /// JSS commit `1feead2` enforces >= 8 characters.
+    #[error("password must be at least {min_length} characters")]
+    PasswordTooShort {
+        /// The minimum length that was not met.
+        min_length: usize,
+    },
 
     /// Caller passed a malformed body.
     #[error("invalid request: {0}")]
@@ -165,6 +178,23 @@ pub async fn login(
     })
 }
 
+/// Validate that a password meets the minimum length requirement.
+///
+/// Returns `Ok(())` when the password is at least [`MIN_PASSWORD_LENGTH`]
+/// characters, or `Err(LoginError::PasswordTooShort)` otherwise. Empty
+/// passwords are also rejected (they are shorter than 8 chars).
+///
+/// This is a standalone helper so both the credentials endpoint and
+/// any registration flow can share the same policy.
+pub fn validate_password_length(password: &str) -> Result<(), LoginError> {
+    if password.len() < MIN_PASSWORD_LENGTH {
+        return Err(LoginError::PasswordTooShort {
+            min_length: MIN_PASSWORD_LENGTH,
+        });
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -188,7 +218,7 @@ mod tests {
                 "alice@example.com",
                 "https://alice.example/profile#me",
                 Some("Alice".into()),
-                "hunter2",
+                "hunter2!",
             )
             .unwrap();
         let jwks = Jwks::generate_es256().unwrap();
@@ -206,7 +236,7 @@ mod tests {
         let (store, jwks, limiter) = seed();
         let resp = login(
             "alice@example.com",
-            "hunter2",
+            "hunter2!",
             &store,
             &jwks,
             "https://pod.example/",
@@ -229,7 +259,7 @@ mod tests {
         let (store, jwks, limiter) = seed();
         let resp = login(
             "alice@example.com",
-            "hunter2",
+            "hunter2!",
             &store,
             &jwks,
             "https://pod.example/",
@@ -269,7 +299,7 @@ mod tests {
         let (store, jwks, limiter) = seed();
         let err = login(
             "nobody@example.com",
-            "hunter2",
+            "hunter2!",
             &store,
             &jwks,
             "https://pod.example/",
@@ -306,7 +336,7 @@ mod tests {
         }
         let err = login(
             "alice@example.com",
-            "hunter2",
+            "hunter2!",
             &store,
             &jwks,
             "https://pod.example/",
@@ -344,5 +374,44 @@ mod tests {
         .await
         .unwrap_err();
         assert!(matches!(err, LoginError::InvalidRequest(_)));
+    }
+
+    // ---- password-length validation (JSS commit 1feead2) ----
+
+    #[test]
+    fn password_too_short_7_chars_rejected() {
+        let err = validate_password_length("1234567").unwrap_err();
+        match err {
+            LoginError::PasswordTooShort { min_length } => {
+                assert_eq!(min_length, 8);
+            }
+            other => panic!("expected PasswordTooShort, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn password_exactly_8_chars_accepted() {
+        validate_password_length("12345678").unwrap();
+    }
+
+    #[test]
+    fn password_longer_than_8_chars_accepted() {
+        validate_password_length("a]9Kz!#mN@xP").unwrap();
+    }
+
+    #[test]
+    fn empty_password_rejected() {
+        let err = validate_password_length("").unwrap_err();
+        match err {
+            LoginError::PasswordTooShort { min_length } => {
+                assert_eq!(min_length, 8);
+            }
+            other => panic!("expected PasswordTooShort, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn min_password_length_constant_is_8() {
+        assert_eq!(MIN_PASSWORD_LENGTH, 8);
     }
 }

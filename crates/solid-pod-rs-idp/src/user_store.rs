@@ -14,6 +14,8 @@ use parking_lot::RwLock;
 use rand::rngs::OsRng;
 use thiserror::Error;
 
+use crate::credentials::MIN_PASSWORD_LENGTH;
+
 /// Errors surfaced by [`UserStore`].
 #[derive(Debug, Error)]
 pub enum UserStoreError {
@@ -24,6 +26,14 @@ pub enum UserStoreError {
     /// Store-specific back-end failure (DB down, etc).
     #[error("backend: {0}")]
     Backend(String),
+
+    /// Password does not meet the minimum length requirement.
+    /// JSS commit `1feead2` enforces >= 8 characters at registration.
+    #[error("password must be at least {min_length} characters")]
+    PasswordTooShort {
+        /// The minimum length that was not met.
+        min_length: usize,
+    },
 
     /// The store does not implement this operation. Surfaced by the
     /// default [`UserStore::delete`] so that stores opting out of
@@ -102,6 +112,10 @@ impl InMemoryUserStore {
     /// Create a user with an Argon2id hash of `password`. Returns
     /// the inserted record. Email is case-normalised (lowercased) on
     /// storage so `find_by_email` can match case-insensitively.
+    ///
+    /// Passwords shorter than [`MIN_PASSWORD_LENGTH`] (8 chars) are
+    /// rejected with [`UserStoreError::PasswordTooShort`], matching
+    /// JSS commit `1feead2`.
     pub fn insert_user(
         &self,
         id: impl Into<String>,
@@ -110,6 +124,11 @@ impl InMemoryUserStore {
         name: Option<String>,
         password: &str,
     ) -> Result<User, UserStoreError> {
+        if password.len() < MIN_PASSWORD_LENGTH {
+            return Err(UserStoreError::PasswordTooShort {
+                min_length: MIN_PASSWORD_LENGTH,
+            });
+        }
         let salt = SaltString::generate(&mut OsRng);
         let hash = Argon2::default()
             .hash_password(password.as_bytes(), &salt)
@@ -197,7 +216,7 @@ mod tests {
                 "del@example.com",
                 "https://del.example/profile#me",
                 None,
-                "pw",
+                "password",
             )
             .unwrap();
         assert!(store.find_by_id("u-del").await.unwrap().is_some());
@@ -219,11 +238,68 @@ mod tests {
                 "bob@example.com",
                 "https://bob.example/profile#me",
                 None,
-                "pw",
+                "password",
             )
             .unwrap();
         let found = store.find_by_id("u-2").await.unwrap().unwrap();
         assert_eq!(found.email, "bob@example.com");
         assert!(store.find_by_id("missing").await.unwrap().is_none());
+    }
+
+    // ---- password-length validation at registration (JSS 1feead2) ----
+
+    #[test]
+    fn insert_user_rejects_7_char_password() {
+        let store = InMemoryUserStore::new();
+        let err = store
+            .insert_user(
+                "u-short",
+                "short@example.com",
+                "https://short.example/profile#me",
+                None,
+                "1234567",
+            )
+            .unwrap_err();
+        match err {
+            UserStoreError::PasswordTooShort { min_length } => {
+                assert_eq!(min_length, 8);
+            }
+            other => panic!("expected PasswordTooShort, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn insert_user_accepts_8_char_password() {
+        let store = InMemoryUserStore::new();
+        let user = store
+            .insert_user(
+                "u-ok",
+                "ok@example.com",
+                "https://ok.example/profile#me",
+                None,
+                "12345678",
+            )
+            .unwrap();
+        assert_eq!(user.id, "u-ok");
+    }
+
+    #[test]
+    fn insert_user_rejects_empty_password() {
+        let store = InMemoryUserStore::new();
+        let err = store
+            .insert_user(
+                "u-empty",
+                "empty@example.com",
+                "https://empty.example/profile#me",
+                None,
+                "",
+            )
+            .unwrap_err();
+        match err {
+            UserStoreError::PasswordTooShort { min_length } => {
+                assert_eq!(min_length, 8);
+            }
+            other => panic!("expected PasswordTooShort, got {other:?}"),
+        }
     }
 }

@@ -488,7 +488,7 @@ mod tests {
                 "alice@example.com",
                 "https://alice.example/profile#me",
                 None,
-                "hunter2",
+                "hunter2!",
             )
             .unwrap();
         let jwks = Jwks::generate_es256().unwrap();
