@@ -63,7 +63,7 @@ impl DeliveryWorker {
             store,
             config,
             http: reqwest::Client::builder()
-                .user_agent("solid-pod-rs-activitypub/0.4")
+                .user_agent("solid-pod-rs-activitypub/0.4.0")
                 .timeout(Duration::from_secs(30))
                 .build()
                 .expect("reqwest client builds"),
@@ -163,6 +163,25 @@ impl DeliveryWorker {
                 })
             }
         }
+    }
+
+    /// Enqueue delivery of `activity_id` to an explicit list of inbox
+    /// URLs. This is the fan-out entry point used by outbox POST and
+    /// matches the JSS v0.0.67 `deliverToFollowers` pattern.
+    ///
+    /// Returns the number of inboxes enqueued.
+    pub async fn enqueue_to_inboxes(
+        &self,
+        activity_id: &str,
+        inboxes: &[String],
+    ) -> Result<usize, crate::error::OutboxError> {
+        for inbox in inboxes {
+            self.store
+                .enqueue_delivery(activity_id, inbox)
+                .await
+                .map_err(crate::error::OutboxError::Storage)?;
+        }
+        Ok(inboxes.len())
     }
 
     /// Long-running poller. Ticks every `tick` and calls

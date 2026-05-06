@@ -131,6 +131,51 @@ pub fn render_actor(
     }
 }
 
+/// The format to serve from the actor endpoint based on Accept
+/// content-negotiation. JSS uses a dedicated route for the AP profile
+/// that content-negotiates between ActivityPub JSON-LD and LDP Turtle/
+/// JSON-LD profile.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ActorFormat {
+    /// `application/activity+json` or
+    /// `application/ld+json; profile="https://www.w3.org/ns/activitystreams"`
+    ActivityJson,
+    /// Everything else — serve the Solid/LDP profile representation.
+    LdpProfile,
+}
+
+/// Inspect an HTTP `Accept` header value and decide whether the
+/// requester wants the ActivityPub JSON-LD representation or the
+/// regular LDP profile.
+///
+/// Matching rules (mirrors JSS `src/ap/routes/actor.js`):
+///
+/// * `application/activity+json` anywhere in the Accept value → [`ActorFormat::ActivityJson`]
+/// * `application/ld+json` **with** the ActivityStreams profile
+///   parameter → [`ActorFormat::ActivityJson`]
+/// * Anything else (including missing/empty Accept) → [`ActorFormat::LdpProfile`]
+pub fn negotiate_actor_format(accept: &str) -> ActorFormat {
+    // Normalise for case-insensitive matching.
+    let lower = accept.to_ascii_lowercase();
+
+    // Exact media-type check.
+    if lower.contains("application/activity+json") {
+        return ActorFormat::ActivityJson;
+    }
+
+    // ld+json with the ActivityStreams profile parameter.
+    if lower.contains("application/ld+json") {
+        // The profile parameter may appear as:
+        //   profile="https://www.w3.org/ns/activitystreams"
+        // with optional spacing around '='.
+        if lower.contains("https://www.w3.org/ns/activitystreams") {
+            return ActorFormat::ActivityJson;
+        }
+    }
+
+    ActorFormat::LdpProfile
+}
+
 /// Attach a did:nostr identifier (or any URI) to the Actor's
 /// `alsoKnownAs` set. Used to bind AP identities to NIP-01 pubkeys in
 /// the SAND stack.
@@ -246,5 +291,74 @@ mod tests {
         let pk = RsaPublicKey::from_public_key_pem(&pub_pem).unwrap();
         assert_eq!(sk.size(), 256); // 2048 bits -> 256 bytes
         assert_eq!(RsaPublicKey::from(&sk), pk);
+    }
+
+    // --- negotiate_actor_format tests ---
+
+    #[test]
+    fn negotiate_activity_json_media_type() {
+        assert_eq!(
+            negotiate_actor_format("application/activity+json"),
+            ActorFormat::ActivityJson,
+        );
+    }
+
+    #[test]
+    fn negotiate_activity_json_with_charset() {
+        assert_eq!(
+            negotiate_actor_format("application/activity+json; charset=utf-8"),
+            ActorFormat::ActivityJson,
+        );
+    }
+
+    #[test]
+    fn negotiate_ld_json_with_activitystreams_profile() {
+        assert_eq!(
+            negotiate_actor_format(
+                r#"application/ld+json; profile="https://www.w3.org/ns/activitystreams""#
+            ),
+            ActorFormat::ActivityJson,
+        );
+    }
+
+    #[test]
+    fn negotiate_ld_json_without_profile_is_ldp() {
+        assert_eq!(
+            negotiate_actor_format("application/ld+json"),
+            ActorFormat::LdpProfile,
+        );
+    }
+
+    #[test]
+    fn negotiate_html_is_ldp() {
+        assert_eq!(
+            negotiate_actor_format("text/html"),
+            ActorFormat::LdpProfile,
+        );
+    }
+
+    #[test]
+    fn negotiate_empty_is_ldp() {
+        assert_eq!(
+            negotiate_actor_format(""),
+            ActorFormat::LdpProfile,
+        );
+    }
+
+    #[test]
+    fn negotiate_mixed_accept_with_activity_json() {
+        // A browser-like Accept that also lists activity+json.
+        assert_eq!(
+            negotiate_actor_format("text/html, application/activity+json, */*"),
+            ActorFormat::ActivityJson,
+        );
+    }
+
+    #[test]
+    fn negotiate_case_insensitive() {
+        assert_eq!(
+            negotiate_actor_format("Application/Activity+JSON"),
+            ActorFormat::ActivityJson,
+        );
     }
 }

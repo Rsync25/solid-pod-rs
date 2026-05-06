@@ -7,6 +7,7 @@
 //! `Promise.allSettled` inline; we queue with retry so restarts don't
 //! drop signed deliveries.
 
+use chrono::Utc;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -95,6 +96,79 @@ pub async fn handle_outbox(
     })
 }
 
+/// Wrap a raw Note (or content-only object) in a `Create` activity.
+///
+/// JSS v0.0.67 accepts both raw Notes and pre-wrapped Create activities
+/// on the outbox POST endpoint. This helper normalises the former into
+/// the latter so downstream processing always sees a proper activity.
+fn wrap_note_in_create(actor: &Actor, note: serde_json::Value) -> serde_json::Value {
+    let base = actor.id.trim_end_matches("#me");
+    let activity_id = format!("{base}/activities/{}", uuid::Uuid::new_v4());
+    let now = Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+
+    // Ensure the Note itself has an id.
+    let mut note = note;
+    if note.get("id").and_then(|v| v.as_str()).map(|s| s.is_empty()).unwrap_or(true) {
+        let note_id = format!("{base}/posts/{}", uuid::Uuid::new_v4());
+        note["id"] = serde_json::Value::String(note_id);
+    }
+    // Stamp attributedTo on the Note if missing.
+    if note.get("attributedTo").is_none() {
+        note["attributedTo"] = serde_json::Value::String(actor.id.clone());
+    }
+    // Stamp published on the Note if missing.
+    if note.get("published").is_none() {
+        note["published"] = serde_json::Value::String(now.clone());
+    }
+
+    serde_json::json!({
+        "@context": "https://www.w3.org/ns/activitystreams",
+        "type": "Create",
+        "id": activity_id,
+        "actor": actor.id,
+        "published": now,
+        "object": note,
+    })
+}
+
+/// Handle a POST to the outbox endpoint. Accepts either:
+///
+/// 1. A pre-formed Activity (has `type` == `Create`/`Follow`/etc.) — passed
+///    through to [`handle_outbox`].
+/// 2. A raw Note (`type` == `"Note"`, or has `content` but no `type`) —
+///    wrapped in a `Create` activity first, matching JSS v0.0.67 behaviour.
+///
+/// Returns the created/submitted activity via [`OutboundDelivery`].
+pub async fn handle_outbox_post(
+    store: &Store,
+    actor: &Actor,
+    body: serde_json::Value,
+) -> Result<OutboundDelivery, OutboxError> {
+    let activity_type = body.get("type").and_then(|v| v.as_str()).unwrap_or("");
+
+    let activity = match activity_type {
+        // Already a well-formed activity — pass through.
+        "Create" | "Follow" | "Update" | "Delete" | "Announce" | "Like" | "Undo" | "Accept"
+        | "Reject" | "Add" | "Remove" | "Block" => body,
+        // Raw Note — wrap in Create.
+        "Note" => wrap_note_in_create(actor, body),
+        // No type but has content — treat as implicit Note.
+        "" if body.get("content").is_some() => {
+            let mut note = body;
+            note["type"] = serde_json::Value::String("Note".into());
+            wrap_note_in_create(actor, note)
+        }
+        // Unknown type — try wrapping in Create as a best-effort.
+        other => {
+            return Err(OutboxError::InvalidActivity(format!(
+                "unsupported activity type for outbox POST: {other}"
+            )));
+        }
+    };
+
+    handle_outbox(store, actor, activity).await
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -169,5 +243,73 @@ mod tests {
         let act = serde_json::json!({"type": "Create", "object": {"type": "Note"}});
         let d = handle_outbox(&store, &actor, act).await.unwrap();
         assert!(d.activity_id.starts_with("https://pod.example/profile/card.jsonld/activities/"));
+    }
+
+    // --- handle_outbox_post tests ---
+
+    #[tokio::test]
+    async fn outbox_post_wraps_raw_note_in_create() {
+        let store = Store::in_memory().await.unwrap();
+        let actor = sample_actor();
+        let note = serde_json::json!({
+            "type": "Note",
+            "content": "Hello from outbox POST"
+        });
+        let delivery = handle_outbox_post(&store, &actor, note).await.unwrap();
+        assert_eq!(delivery.activity["type"], "Create");
+        assert_eq!(delivery.activity["object"]["type"], "Note");
+        assert_eq!(delivery.activity["object"]["content"], "Hello from outbox POST");
+        // The Note should have attributedTo and published stamped.
+        assert_eq!(delivery.activity["object"]["attributedTo"], actor.id);
+        assert!(delivery.activity["object"]["published"].as_str().is_some());
+        // The Create should have an id and published.
+        assert!(delivery.activity["id"].as_str().is_some());
+        assert!(delivery.activity["published"].as_str().is_some());
+    }
+
+    #[tokio::test]
+    async fn outbox_post_passes_through_create_activity() {
+        let store = Store::in_memory().await.unwrap();
+        let actor = sample_actor();
+        let create = serde_json::json!({
+            "type": "Create",
+            "object": {"type": "Note", "content": "pre-wrapped"}
+        });
+        let delivery = handle_outbox_post(&store, &actor, create).await.unwrap();
+        assert_eq!(delivery.activity["type"], "Create");
+        assert_eq!(delivery.activity["object"]["content"], "pre-wrapped");
+    }
+
+    #[tokio::test]
+    async fn outbox_post_wraps_content_only_body_as_note() {
+        let store = Store::in_memory().await.unwrap();
+        let actor = sample_actor();
+        // No type, but has content — should be treated as an implicit Note.
+        let body = serde_json::json!({"content": "implicit note"});
+        let delivery = handle_outbox_post(&store, &actor, body).await.unwrap();
+        assert_eq!(delivery.activity["type"], "Create");
+        assert_eq!(delivery.activity["object"]["type"], "Note");
+        assert_eq!(delivery.activity["object"]["content"], "implicit note");
+    }
+
+    #[tokio::test]
+    async fn outbox_post_rejects_unsupported_type() {
+        let store = Store::in_memory().await.unwrap();
+        let actor = sample_actor();
+        let body = serde_json::json!({"type": "TentacleWiggle"});
+        let err = handle_outbox_post(&store, &actor, body).await.unwrap_err();
+        assert!(matches!(err, OutboxError::InvalidActivity(_)));
+    }
+
+    #[tokio::test]
+    async fn outbox_post_note_delivers_to_followers() {
+        let store = Store::in_memory().await.unwrap();
+        let actor = sample_actor();
+        store.add_follower(&actor.id, "f1", Some("https://f1/inbox")).await.unwrap();
+        store.add_follower(&actor.id, "f2", Some("https://f2/inbox")).await.unwrap();
+
+        let note = serde_json::json!({"type": "Note", "content": "fan-out test"});
+        let delivery = handle_outbox_post(&store, &actor, note).await.unwrap();
+        assert_eq!(delivery.queued_inboxes, 2);
     }
 }

@@ -97,7 +97,7 @@ impl Default for HttpActorKeyResolver {
     fn default() -> Self {
         Self {
             client: reqwest::Client::builder()
-                .user_agent("solid-pod-rs-activitypub/0.4")
+                .user_agent("solid-pod-rs-activitypub/0.4.0")
                 .build()
                 .expect("reqwest client builds"),
         }

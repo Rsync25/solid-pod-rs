@@ -46,7 +46,8 @@ pub mod store;
 
 // ---- Flat re-export surface -------------------------------------------------
 pub use actor::{
-    generate_actor_keypair, render_actor, with_also_known_as, Actor, Endpoints, PublicKey,
+    generate_actor_keypair, negotiate_actor_format, render_actor, with_also_known_as, Actor,
+    ActorFormat, Endpoints, PublicKey,
 };
 pub use delivery::{DeliveryConfig, DeliveryOutcome, DeliveryWorker};
 pub use discovery::{
@@ -58,5 +59,5 @@ pub use http_sig::{
     HttpActorKeyResolver, OutboundRequest, SignedRequest, VerifiedActor,
 };
 pub use inbox::{build_accept, handle_inbox, InboxOutcome};
-pub use outbox::{handle_outbox, OutboundDelivery};
+pub use outbox::{handle_outbox, handle_outbox_post, OutboundDelivery};
 pub use store::{DeliveryItem, InboxRow, OutboxRow, Store};
