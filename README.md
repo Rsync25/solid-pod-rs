@@ -507,12 +507,14 @@ weaken the protections the wider Solid ecosystem depends on. See
 [`NOTICE`](crates/solid-pod-rs/NOTICE) for the full provenance chain
 and attribution.
 
-Compared with JSS, solid-pod-rs trades feature breadth for
-runtime properties: no Node.js dependency, single static binary,
-lower memory footprint, deterministic RDF serialisation, and
-compile-time feature gating. JSS remains the reference for features
-not yet ported — see the parity checklist for what we have, what we
-defer, and why.
+solid-pod-rs has reached ~98 % strict parity with JSS (0 rows
+missing on the 132-row tracker; 5 explicitly deferred as legacy/P3,
+4 wontfix-in-crate as consumer concerns). On top of feature parity,
+the Rust port adds runtime advantages: no Node.js dependency, single
+static binary, lower memory footprint, deterministic RDF
+serialisation, and compile-time feature gating. See the
+[parity checklist](crates/solid-pod-rs/PARITY-CHECKLIST.md) for the
+full row-by-row accounting.
 
 ---
 
