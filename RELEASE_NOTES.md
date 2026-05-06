@@ -1,3 +1,75 @@
+# v0.5.0-alpha.2 (Sprint 12 close — 2026-05-06)
+
+solid-pod-rs closes the JSS v0.0.60–v0.0.71 feature delta. The workspace
+now sits at **~98% strict / ~100% spec-normative** against the real
+JavaScriptSolidServer. Sprint 12 covers security hardening (size-capped
+ACL parsing, DNS failure blocking, `.account` dotfile, password-length
+validation) and ActivityPub federation expansion (outbox POST with
+Note→Create wrapping, Accept-negotiation, actor caching).
+
+**Headline**: 702 workspace tests pass, 0 failing, `cargo clippy
+--workspace --all-features --all-targets -- -D warnings` clean.
+No outstanding P0. No regressions.
+
+## Sprint 12 (JSS v0.0.60–v0.0.71 delta — ADR-058)
+
+### P0 — Security hardening
+
+- **Size-capped ACL parsing (CWE-400).** `parse_turtle_acl_with_limit(input,
+  max_bytes)` rejects ACL documents over the configured cap (default 1 MiB,
+  tunable via `JSS_MAX_ACL_BYTES`). `parse_jsonld_acl_with_limits(body,
+  max_bytes, max_depth)` provides equivalent protection for JSON-LD. Returns
+  `PodError::PayloadTooLarge` on oversized input.
+- **DNS resolution failure blocking.** `SsrfError::DnsFailure` already
+  existed; Sprint 12 adds regression tests for `.invalid` TLD per RFC 6761,
+  confirming that unresolvable hostnames are blocked as defence-in-depth
+  against SSRF.
+- **`.account` dotfile allowlist.** `DEFAULT_ALLOWED` and
+  `STATIC_ALLOWED_DOTFILES` now include `.account`, matching JSS commit
+  `32c0db2` which allows the IdP login endpoint at `/.account/…`.
+  `config::default_dotfile_allowlist()` updated accordingly.
+- **Iterative path sanitisation.** `scrub_dotdot` was already iterative
+  (loops until stable); Sprint 12 adds regression tests for
+  double-encoded `..` traversal and intermediate `/../` segments.
+
+### P1 — IdP password validation (CWE-521)
+
+- **`MIN_PASSWORD_LENGTH = 8`** constant and `validate_password_length()`
+  helper in `solid-pod-rs-idp`. Mirrors JSS commit `1feead2` which
+  rejects passwords shorter than 8 characters. `LoginError::PasswordTooShort`
+  variant returns HTTP 400 via the Axum binder. `InMemoryUserStore::insert_user`
+  enforces the same minimum at registration time.
+
+### P1 — ActivityPub federation expansion
+
+- **Outbox POST endpoint.** `handle_outbox_post()` accepts raw Notes,
+  pre-formed Activities, or content-only bodies. Notes are auto-wrapped
+  in `Create` activities with UUID IDs and ISO 8601 timestamps. Delivery
+  fans out to all follower inboxes.
+- **Accept-negotiation for actor profiles.** `negotiate_actor_format(accept)`
+  returns `ActorFormat::ActivityJson` or `ActorFormat::LdpProfile` based
+  on the request `Accept` header, supporting `application/activity+json`,
+  `application/ld+json`, and Turtle/N-Triples for LDP.
+- **Actor cache.** `Store::cache_actor()`, `get_cached_actor()`, and
+  `is_actor_cache_fresh()` with chrono-based 24-hour freshness window.
+- **`enqueue_to_inboxes()`.** Batch delivery helper in the delivery module.
+
+### Parity tracker
+
+- PARITY-CHECKLIST.md: 11 new rows (169–179) covering the JSS
+  v0.0.60–v0.0.71 delta; parity headline moved from ~97% (Sprint 11)
+  to ~98% (Sprint 12). 132 total rows tracked.
+- ADR-058 documents the full JSS drift analysis.
+
+### QE / test suite
+
+- 13 new comprehensive test files across 4 crates (252 new tests).
+- `scripts/test-all.sh` — workspace test runner with per-crate
+  pass/fail reporting.
+- `scripts/parity-check.sh` — automated parity threshold gate (90%).
+
+---
+
 # v0.5.0-alpha.1 (Sprint 11 close — 2026-04-24)
 
 solid-pod-rs closes the top-10 remaining JSS parity roadmap. The
@@ -204,12 +276,11 @@ solid-pod-rs-server --config config.json
   deployment was vulnerable — rotate any DPoP-bound tokens issued
   before the upgrade.
 
-## Reserved for v0.5.0
+## Reserved for v0.5.0 (note: now shipped)
 
 The sibling crates `solid-pod-rs-activitypub`, `solid-pod-rs-git`,
-`solid-pod-rs-idp`, and `solid-pod-rs-nostr` remain empty namespace
-stubs. They must not be depended on until v0.5.0 lands their
-implementations.
+`solid-pod-rs-idp`, `solid-pod-rs-nostr`, and `solid-pod-rs-didkey`
+are now functional as of Sprint 10–12. See v0.5.0-alpha.2 above.
 
 See
 [`crates/solid-pod-rs/CHANGELOG.md`](crates/solid-pod-rs/CHANGELOG.md)

@@ -1,9 +1,10 @@
 # solid-pod-rs — Agent Integration Guide
 
-> Status as of Sprint 9 close (commit `2275146`, 2026-04-24).
-> 66% strict parity / 85% spec-normative parity against
-> JavaScriptSolidServer (JSS). 121 parity rows, 567 tests,
-> 15,504 lines of Rust in the `solid-pod-rs` library crate.
+> Status as of Sprint 12 close (2026-05-06).
+> ~98% strict parity / ~100% spec-normative parity against
+> JavaScriptSolidServer (JSS). 132 parity rows, 702 tests,
+> 47,600 lines of Rust across the workspace (29,196 in the
+> `solid-pod-rs` library crate). Five sibling crates functional.
 
 ## How to use this guide
 

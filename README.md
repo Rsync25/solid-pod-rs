@@ -120,29 +120,48 @@ let storage = FsBackend::new(PathBuf::from("./pod-root"));
 | WebhookChannel2023 notifications        | present | Solid Notifications 0.2      | `notifications::webhook`       | |
 | Legacy `solid-0.1` WebSocket adapter    | present | Legacy SolidOS               | `notifications::legacy`        | Feature `legacy-notifications`. |
 | SSRF guard                              | present | OWASP ASVS §10.8             | `security::ssrf`               | Feature `security-primitives`. |
-| Dotfile allowlist                       | present | Solid Protocol §3.5          | `security::dotfile`            | Default: `.acl`, `.meta`. |
+| Dotfile allowlist                       | present | Solid Protocol §3.5          | `security::dotfile`            | Default: `.acl`, `.meta`, `.account`. |
 | Layered config loader (JSS-compatible)  | present | —                            | `config`                       | Feature `config-loader`. |
 | Well-known Solid discovery document     | present | Solid Protocol §4.1.2        | `interop::well_known_solid`    | |
 | WebFinger (JRD)                         | present | RFC 7033                     | `interop::webfinger_response`  | |
 | FS backend                              | present | —                            | `storage::fs`                  | Default. |
 | In-memory backend                       | present | —                            | `storage::memory`              | Default; used in tests. |
 | S3 backend                              | present | —                            | `storage::s3`                  | Feature `s3-backend`. |
-| ActivityPub federation                  | functional | —                        | crate `solid-pod-rs-activitypub` | Sprint 10. Rows 102–108, 131. |
+| Size-capped ACL parsing (DoS protection) | present | CWE-400                     | `wac::parse_turtle_acl_with_limit` | Sprint 12. `JSS_MAX_ACL_BYTES` (default 1 MiB). |
+| Password-length validation              | present | CWE-521                      | crate `solid-pod-rs-idp`       | Sprint 12. Min 8 chars (JSS commit `1feead2`). |
+| ActivityPub federation                  | functional | —                        | crate `solid-pod-rs-activitypub` | Sprint 10 + 12. Rows 102–108, 131, 169–172. |
 | Git HTTP backend                        | functional | —                        | crate `solid-pod-rs-git`       | Sprint 10. Rows 69, 100. |
-| Embedded Solid-OIDC IDP                 | functional | —                        | crate `solid-pod-rs-idp`       | Sprint 10 + 11. Rows 74–81, 130 (Sprint 11 promoted Passkeys + Schnorr). |
+| Embedded Solid-OIDC IDP                 | functional | —                        | crate `solid-pod-rs-idp`       | Sprint 10–12. Rows 74–81, 130. Passkeys + Schnorr (Sprint 11); password validation (Sprint 12). |
 | did:nostr resolver + embedded relay     | functional | —                        | crate `solid-pod-rs-nostr`     | Sprint 10. Rows 89, 90, 101, 132. |
 | did:key (Ed25519/P-256/secp256k1) + self-signed JWT verifier | functional | W3C did:key + LWS 1.0 SSI | crate `solid-pod-rs-didkey`    | Sprint 11 (NEW). Row 153. |
 
 Full parity tracking against the reference JavaScript implementation
 lives in
 [`crates/solid-pod-rs/PARITY-CHECKLIST.md`](crates/solid-pod-rs/PARITY-CHECKLIST.md)
-→ **~100 % spec-normative parity / ~97 % strict on the full 121-row tracker**
-(Sprint 11 close; 835 workspace tests, 0 failing, clippy `-D warnings` clean).
+→ **~100 % spec-normative parity / ~98 % strict on the full 132-row tracker**
+(Sprint 12 close; 702 workspace tests, 0 failing, clippy `-D warnings` clean).
 Prose commentary in
 [`crates/solid-pod-rs/GAP-ANALYSIS.md`](crates/solid-pod-rs/GAP-ANALYSIS.md),
 and an agent-oriented integration guide with per-module JSS source
 breadcrumbs in
 [`crates/solid-pod-rs/docs/reference/agent-integration-guide.md`](crates/solid-pod-rs/docs/reference/agent-integration-guide.md).
+
+```mermaid
+timeline
+    title JSS Parity Progression
+    Sprint 6  : 40% strict
+              : WAC 2.0 + webhook signing
+    Sprint 7  : 55% strict
+              : Rate limiter + CORS + middleware
+    Sprint 8–9 : 66% strict
+               : DPoP CVE fix + SSRF + dotfile
+    Sprint 10  : 83% strict
+               : Sibling crates land (AP, Git, IdP, Nostr)
+    Sprint 11  : 97% strict
+               : LWS 1.0 + did:key + legacy notifications
+    Sprint 12  : 98% strict
+               : JSS v0.0.60–v0.0.71 delta closed
+```
 
 ---
 
@@ -151,10 +170,10 @@ breadcrumbs in
 The `solid-pod-rs` library crate, the `solid-pod-rs-server` binary,
 and five sibling crates
 (`solid-pod-rs-activitypub`, `solid-pod-rs-git`, `solid-pod-rs-idp`,
-`solid-pod-rs-nostr`, `solid-pod-rs-didkey`) constitute the v0.5.0-alpha.1
+`solid-pod-rs-nostr`, `solid-pod-rs-didkey`) constitute the v0.5.0-alpha.2
 shipping surface. Every module listed in the feature matrix above is
 live, tested, and gated behind a stable Cargo feature.
-**835 tests pass across the workspace; 0 failing; clippy `-D warnings`
+**702 tests pass across the workspace; 0 failing; clippy `-D warnings`
 clean** against the full feature set
 (`oidc,dpop-replay-cache,legacy-notifications,jss-v04,acl-origin,security-primitives,config-loader,nip98-schnorr,webhook-signing,did-nostr,rate-limit,quota,passkey,schnorr-sso`).
 
@@ -167,7 +186,8 @@ clean** against the full feature set
 - `wac` — deny-by-default evaluator with `acl:default` inheritance,
   `acl:origin` enforcement, WAC 2.0 conditions framework
   (`acl:ClientCondition`, `acl:IssuerCondition`), JSON-LD + Turtle ACL
-  parsers with size + depth caps.
+  parsers with size + depth caps (`parse_turtle_acl_with_limit`,
+  `parse_jsonld_acl_with_limits` — CWE-400 DoS hardening, Sprint 12).
 - `webid` — profile documents emitting `solid:oidcIssuer` and
   CID-bound storage links.
 - `auth::nip98` — NIP-98 HTTP authentication; BIP-340 Schnorr signature
@@ -180,8 +200,9 @@ clean** against the full feature set
   RFC 9421 Ed25519 signing + circuit breaker, legacy `solid-0.1`
   adapter with WAC read-check on subscribe.
 - `security` — SSRF guard (RFC 1918 / loopback / link-local / cloud
-  metadata), dotfile allowlist (`.acl`, `.meta`, `.well-known`,
-  `.quota.json`), CORS policy, sliding-window LRU rate limiter.
+  metadata, DNS failure blocking), dotfile allowlist (`.acl`, `.meta`,
+  `.well-known`, `.quota.json`, `.account`), CORS policy, sliding-window
+  LRU rate limiter.
 - `quota` — per-pod `.quota.json` sidecar with atomic writes (P0
   hardening, Sprint 8).
 - `multitenant` — `PodResolver` trait; path-based + subdomain modes.
@@ -197,18 +218,18 @@ clean** against the full feature set
   did:nostr; `PathTraversalGuard` + `DotfileGuard` middleware; WAC
   enforcement on writes; optional rustls TLS.
 
-### Sibling crates (Sprint 10 + 11 — all functional)
+### Sibling crates (Sprint 10–12 — all functional)
 
 All five sibling crates are functional and shipping. Integrators may
 take a dependency today.
 
 | Crate | LOC | Rows | Landed |
 |-------|-----|------|--------|
-| `crates/solid-pod-rs-activitypub` | 2,394 | 102–108, 131 | Sprint 10 |
-| `crates/solid-pod-rs-git`         | 1,299 | 69, 100        | Sprint 10 |
-| `crates/solid-pod-rs-idp`         | ~4,400 | 74–81, 130   | Sprint 10 + 11 (Passkeys/Schnorr full) |
+| `crates/solid-pod-rs-activitypub` | 4,453 | 102–108, 131, 169–172 | Sprint 10 + 12 (outbox POST, Accept-negotiation, actor cache, `enqueue_to_inboxes`) |
+| `crates/solid-pod-rs-git`         | 1,685 | 69, 100        | Sprint 10 |
+| `crates/solid-pod-rs-idp`         | 6,160 | 74–81, 130     | Sprint 10–12 (Passkeys/Schnorr Sprint 11; password validation Sprint 12) |
 | `crates/solid-pod-rs-nostr`       | 2,177 | 89, 90, 101, 132 | Sprint 10 |
-| `crates/solid-pod-rs-didkey`      | 858   | 153            | Sprint 11 (NEW) |
+| `crates/solid-pod-rs-didkey`      | 1,167 | 153            | Sprint 11 |
 
 The did:nostr resolver shipped in Sprint 6 lives inside the core library
 (`interop::did_nostr`) as well as the `solid-pod-rs-nostr` crate, so the
@@ -221,36 +242,49 @@ Tier 1 + Tier 3 DID flow is available either way.
 solid-pod-rs is a Cargo workspace. Each crate has a single
 responsibility, with a strict one-way dependency gradient.
 
-```
-┌──────────────────────────────────────────────────────────────┐
-│  crates/solid-pod-rs-server                                  │
-│    CLI + actix-web transport + signal handling.              │
-│    Wires `ConfigLoader` → storage → PodService.              │
-│    Has no protocol knowledge of its own.                     │
-│                           │                                  │
-│                           ▼                                  │
-│  crates/solid-pod-rs                                         │
-│    Protocol primitives. Framework-agnostic.                  │
-│    ├── storage   — Storage trait + FS/Memory/S3 backends     │
-│    ├── ldp       — Resources, containers, conneg, PATCH      │
-│    ├── wac       — Access control (ACL + origin + inherit)   │
-│    ├── webid     — WebID profile documents                   │
-│    ├── auth      — NIP-98 HTTP auth                          │
-│    ├── oidc      — Solid-OIDC 0.1 + DPoP + replay cache      │
-│    ├── notifications — WebSocket + Webhook + legacy adapter  │
-│    ├── security  — SSRF guard + dotfile allowlist            │
-│    ├── config    — JSS-compatible layered loader             │
-│    ├── interop   — Well-known Solid + WebFinger              │
-│    └── provision — Pod bootstrap (WebID + containers + ACL)  │
-│                                                              │
-│  crates/solid-pod-rs-{activitypub, git, idp, nostr, didkey}  │
-│    Functional extension crates (Sprint 10 + 11).             │
-│    - activitypub: ActivityPub + HTTP Sig + NodeInfo + retry │
-│    - git:         Smart-HTTP git-http-backend bridge        │
-│    - idp:         Solid-OIDC IdP + Passkeys + Schnorr       │
-│    - nostr:       did:nostr resolver + BIP-340 NIP-01 relay │
-│    - didkey:      did:key (Ed25519/P-256/secp256k1) + JWT   │
-└──────────────────────────────────────────────────────────────┘
+```mermaid
+graph TD
+    SERVER["solid-pod-rs-server\nCLI + actix-web transport\nConfigLoader → storage → PodService"]
+
+    CORE["solid-pod-rs\nProtocol primitives — framework-agnostic"]
+
+    AP["solid-pod-rs-activitypub\nAP federation + HTTP Sig\n4,453 LOC"]
+    GIT["solid-pod-rs-git\nSmart-HTTP backend\n1,685 LOC"]
+    IDP["solid-pod-rs-idp\nSolid-OIDC IdP\n6,160 LOC"]
+    NOSTR["solid-pod-rs-nostr\ndid:nostr + NIP-01 relay\n2,177 LOC"]
+    DIDKEY["solid-pod-rs-didkey\ndid:key + JWT verify\n1,167 LOC"]
+
+    SERVER --> CORE
+    AP --> CORE
+    GIT --> CORE
+    IDP --> CORE
+    NOSTR --> CORE
+    DIDKEY --> CORE
+
+    subgraph lib ["Core library modules"]
+        direction LR
+        S[storage] --- L[ldp]
+        L --- W[wac]
+        W --- WID[webid]
+        WID --- A[auth]
+        A --- O[oidc]
+        O --- N[notifications]
+        N --- SEC[security]
+        SEC --- CFG[config]
+        CFG --- INT[interop]
+        INT --- PRV[provision]
+    end
+
+    CORE --- lib
+
+    style SERVER fill:#4a90d9,stroke:#2c5f8a,color:#fff
+    style CORE fill:#2ecc71,stroke:#1a9850,color:#fff
+    style AP fill:#e67e22,stroke:#bf6516,color:#fff
+    style GIT fill:#e67e22,stroke:#bf6516,color:#fff
+    style IDP fill:#e67e22,stroke:#bf6516,color:#fff
+    style NOSTR fill:#e67e22,stroke:#bf6516,color:#fff
+    style DIDKEY fill:#e67e22,stroke:#bf6516,color:#fff
+    style lib fill:#f0f4f8,stroke:#b0bec5
 ```
 
 The library crate never constructs an HTTP server. Consumers own the
@@ -258,6 +292,44 @@ transport, the routing, and the runtime. The server crate is the
 canonical example of wiring the library into actix-web; the patterns
 it uses are documented in
 [`crates/solid-pod-rs/examples/embed_in_actix.rs`](crates/solid-pod-rs/examples/embed_in_actix.rs).
+
+### Request lifecycle
+
+Every inbound request follows the same three-phase pipeline regardless
+of which auth mechanism the client uses:
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant MW as Middleware
+    participant AUTH as Auth Layer
+    participant WAC as WAC Evaluator
+    participant LDP as LDP Engine
+    participant ST as Storage Backend
+
+    C->>MW: HTTP request
+    MW->>MW: Path traversal guard
+    MW->>MW: Dotfile allowlist check
+    alt blocked
+        MW-->>C: 403 Forbidden
+    end
+    MW->>AUTH: Clean request
+    AUTH->>AUTH: Verify token/proof
+    Note over AUTH: NIP-98: Schnorr + kind 27235
+    Note over AUTH: OIDC: DPoP proof + access token
+    AUTH->>WAC: AuthContext (identity + modes)
+    WAC->>WAC: Walk .acl ancestors
+    WAC->>WAC: Evaluate agent matchers
+    WAC->>WAC: Check mode (R/W/A/C)
+    alt denied
+        WAC-->>C: 403 + WAC-Allow header
+    end
+    WAC->>LDP: Authorized request
+    LDP->>ST: get / put / delete / list
+    ST-->>LDP: Resource + metadata
+    LDP->>LDP: Conneg + ETag + Link headers
+    LDP-->>C: 200 OK + body
+```
 
 This split — formalised in
 [`crates/solid-pod-rs/docs/explanation/architecture-decisions.md`](crates/solid-pod-rs/docs/explanation/architecture-decisions.md) —

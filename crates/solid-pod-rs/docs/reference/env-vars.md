@@ -29,8 +29,29 @@ wrappers add the indirection.
 | `POD_WEBHOOK_MAX_RETRIES`| integer, default 3 | `WebhookChannelManager::max_retries` | Max retries on 5xx. |
 | `POD_WS_HEARTBEAT`       | seconds, default 30 | `WebSocketChannelManager::with_heartbeat` | WebSocket ping interval. |
 
-None of the above are parsed by the library. This table is a suggested
-vocabulary so multi-pod deployments can share config conventions.
+## JSS-compatible env vars
+
+The `solid-pod-rs-server` binary and the `config` module honour JSS-
+compatible environment variables so existing deployment scripts work
+unchanged.
+
+| Variable | Type / default | Consumed by | Purpose |
+|---|---|---|---|
+| `JSS_HOST`             | string, default `127.0.0.1` | `config::ConfigLoader` | Bind address. |
+| `JSS_PORT`             | u16, default `3000` | `config::ConfigLoader` | Listen port. |
+| `JSS_BASE_URL`         | URL | `config::ConfigLoader` | Externally visible base URL. |
+| `JSS_STORAGE_ROOT`     | path | `config::ConfigLoader` | Filesystem root for the FS backend. |
+| `JSS_OIDC_ISSUER`      | URL | `config::ConfigLoader` | Identity provider discovery URL. |
+| `JSS_WORKERS`          | usize, default CPUs | `config::ConfigLoader` | actix-web worker count. |
+| `JSS_LOG_LEVEL`        | string | `config::ConfigLoader` | `trace` / `debug` / `info` / `warn` / `error`. |
+| `JSS_DISABLE_DOTFILES` | bool | `config::ConfigLoader` | If set, no dotfiles served even on allowlist. |
+| `JSS_MAX_ACL_BYTES`    | bytes, default `1048576` (1 MiB) | `wac::parse_turtle_acl_with_limit`, `wac::parse_jsonld_acl_with_limits` | Maximum ACL document size before rejection (CWE-400 DoS protection). Added Sprint 12. |
+| `DOTFILE_ALLOWLIST`    | comma-separated | `security::dotfile::DotfileAllowlist::from_env` | Override the default dotfile allowlist (`.acl`, `.meta`, `.account`). |
+
+None of the `POD_*` vars above are parsed by the library. The `JSS_*`
+vars are consumed by the config loader when the `config-loader` feature
+is enabled. This table is a suggested vocabulary so multi-pod
+deployments can share config conventions.
 
 ## Tracing / logging
 

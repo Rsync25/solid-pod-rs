@@ -4,9 +4,9 @@ Framework-agnostic Rust library for serving [Solid Protocol 0.11]
 pods: LDP resources and containers, Web Access Control, WebID,
 Solid Notifications 0.2, Solid-OIDC 0.1, and NIP-98 HTTP auth.
 
-**Parity vs JSS: 85 % spec-normative** (66 % strict on the full 121-row
-tracker — see [`PARITY-CHECKLIST.md`](PARITY-CHECKLIST.md)). 567 tests
-pass across the workspace as of Sprint 9 (`2275146`).
+**Parity vs JSS: ~100 % spec-normative** (~98 % strict on the full
+132-row tracker — see [`PARITY-CHECKLIST.md`](PARITY-CHECKLIST.md)).
+702 tests pass across the workspace as of Sprint 12 close (2026-05-06).
 
 The library has no opinions about the HTTP runtime; wire it into
 actix-web, axum, hyper, or any other server. For a turnkey binary
@@ -64,22 +64,46 @@ let storage = FsStorage::new(PathBuf::from("./pod-root"));
 
 ## Sibling crate ecosystem
 
-Four sibling crates live in the workspace as **reserved stubs for
-v0.5.0**. Each is ~25 lines of doc comment in `src/lib.rs` with no code
-and no tests. Integrators must not take dependencies on them until the
-corresponding implementation lands.
+Five sibling crates live in the workspace — all **functional and
+shipping** as of Sprint 12. Integrators may depend on them today.
 
-| Crate                      | Target parity rows | JSS source refs                     |
-|----------------------------|--------------------|-------------------------------------|
-| `solid-pod-rs-activitypub` | 102–108, 131       | `src/ap/{index,routes/inbox,routes/outbox,store}.js` |
-| `solid-pod-rs-git`         | 69, 100            | `src/handlers/git.js`               |
-| `solid-pod-rs-idp`         | 74–82, 130         | `src/idp/{index,provider,passkey,interactions}.js` |
-| `solid-pod-rs-nostr`       | 89, 90, 101, 132   | `src/{did/resolver,nostr/relay,auth/did-nostr}.js`  |
+| Crate                      | LOC   | Parity rows            | JSS source refs                     |
+|----------------------------|-------|------------------------|-------------------------------------|
+| `solid-pod-rs-activitypub` | 4,453 | 102–108, 131, 169–172  | `src/ap/{index,routes/inbox,routes/outbox,store}.js` |
+| `solid-pod-rs-git`         | 1,685 | 69, 100                | `src/handlers/git.js`               |
+| `solid-pod-rs-idp`         | 6,160 | 74–81, 130             | `src/idp/{index,provider,passkey,interactions,credentials}.js` |
+| `solid-pod-rs-nostr`       | 2,177 | 89, 90, 101, 132       | `src/{did/resolver,nostr/relay,auth/did-nostr}.js`  |
+| `solid-pod-rs-didkey`      | 1,167 | 153                    | W3C did:key spec + LWS 1.0 SSI     |
 
-The did:nostr resolver already shipped in Sprint 6 lives inside the
-core library (`interop::did_nostr` under `did-nostr`) rather than the
-`solid-pod-rs-nostr` stub, so the Tier 1 + Tier 3 DID flow is available
-today without depending on the reserved namespace.
+The did:nostr resolver shipped in Sprint 6 lives inside the core
+library (`interop::did_nostr` under `did-nostr`) as well as the
+`solid-pod-rs-nostr` crate, so the Tier 1 + Tier 3 DID flow is
+available either way.
+
+## WAC inheritance model
+
+```mermaid
+flowchart TD
+    REQ["Request for<br/>/pod/notes/2024/entry.ttl"] --> Q1{".acl sidecar<br/>at entry.ttl.acl?"}
+    Q1 -->|found| EVAL["Evaluate ACL rules<br/>against AuthContext"]
+    Q1 -->|not found| Q2{".acl at<br/>/pod/notes/2024/.acl?"}
+    Q2 -->|"found (acl:default)"| EVAL
+    Q2 -->|not found| Q3{".acl at<br/>/pod/notes/.acl?"}
+    Q3 -->|"found (acl:default)"| EVAL
+    Q3 -->|not found| Q4{".acl at<br/>/pod/.acl?"}
+    Q4 -->|"found (acl:default)"| EVAL
+    Q4 -->|not found| DENY["DENY<br/>(no ACL = no access)"]
+
+    EVAL --> CHK{"Agent match?<br/>acl:agent / agentClass<br/>/ agentGroup"}
+    CHK -->|"matched + mode ok"| ALLOW["ALLOW<br/>+ WAC-Allow header"]
+    CHK -->|"no match"| DENY2["DENY<br/>+ WAC-Allow header"]
+
+    style REQ fill:#4a90d9,stroke:#2c5f8a,color:#fff
+    style ALLOW fill:#2ecc71,stroke:#1a9850,color:#fff
+    style DENY fill:#e74c3c,stroke:#c0392b,color:#fff
+    style DENY2 fill:#e74c3c,stroke:#c0392b,color:#fff
+    style EVAL fill:#9b59b6,stroke:#7d3c98,color:#fff
+```
 
 ## Security posture
 
@@ -92,14 +116,16 @@ today without depending on the reserved namespace.
   endpoints are rejected on every outbound fetch (JWKS discovery,
   webhook delivery, did:nostr resolution). DNS-rebinding is closed by
   pinning the resolved IP on the per-call reqwest client.
-- **Dotfile allowlist** — only `.acl`, `.meta`, `.well-known`, and
-  `.quota.json` are served. All other dotfiles return 404 regardless
-  of storage-layer presence.
+- **Dotfile allowlist** — only `.acl`, `.meta`, `.well-known`,
+  `.quota.json`, and `.account` are served. All other dotfiles return
+  404 regardless of storage-layer presence.
 - **RFC 7638 canonical JWK thumbprints** — replaces the previous
   hand-rolled JSON template; verified byte-for-byte against the
   spec's appendix-A vector.
-- **WAC parser bounds** — 1 MiB Turtle input cap
-  (`JSS_MAX_ACL_BYTES`); 32-level JSON-LD depth cap.
+- **WAC parser bounds** — 1 MiB Turtle input cap via
+  `parse_turtle_acl_with_limit` (`JSS_MAX_ACL_BYTES`); 32-level
+  JSON-LD depth cap via `parse_jsonld_acl_with_limits`. Returns
+  `PodError::PayloadTooLarge` on oversized input (CWE-400, Sprint 12).
 - **Atomic quota writes** — temp-file + rename so concurrent writers
   cannot observe a torn `.quota.json`.
 - **RFC 9421 webhook signing** — Ed25519 over `@method`,

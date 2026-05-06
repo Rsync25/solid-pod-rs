@@ -27,6 +27,42 @@ We **do not** (as a library) defend against:
 
 Two layers, independent, stackable:
 
+```mermaid
+flowchart TD
+    REQ["Inbound HTTP Request"] --> DOTFILE{"Dotfile<br/>allowlist?"}
+    DOTFILE -->|blocked| R403A["403 Forbidden"]
+    DOTFILE -->|pass| TRAV{"Path traversal<br/>guard?"}
+    TRAV -->|"contains .. or null"| R403B["403 Forbidden"]
+    TRAV -->|clean| SIZECAP{"ACL size<br/>cap?"}
+    SIZECAP -->|"> 1 MiB"| R413["413 Payload Too Large"]
+    SIZECAP -->|ok| AUTHTYPE{"Auth header<br/>present?"}
+
+    AUTHTYPE -->|"Authorization: Nostr"| NIP98["NIP-98 verify<br/>kind 27235 + Schnorr"]
+    AUTHTYPE -->|"Authorization: DPoP"| DPOP["DPoP proof verify<br/>+ access token"]
+    AUTHTYPE -->|none| ANON["Anonymous<br/>(foaf:Agent only)"]
+
+    NIP98 -->|"fail"| R401A["401 Unauthorized"]
+    NIP98 -->|"ok"| IDENTITY["AuthContext<br/>(agent URI + modes)"]
+    DPOP -->|"fail"| R401B["401 Unauthorized"]
+    DPOP -->|"ok"| IDENTITY
+    ANON --> IDENTITY
+
+    IDENTITY --> WAC{"WAC evaluator<br/>deny-by-default"}
+    WAC -->|"no matching ACL"| R403C["403 + WAC-Allow"]
+    WAC -->|"mode granted"| LDP["LDP engine<br/>→ Storage"]
+
+    style REQ fill:#4a90d9,stroke:#2c5f8a,color:#fff
+    style LDP fill:#2ecc71,stroke:#1a9850,color:#fff
+    style R403A fill:#e74c3c,stroke:#c0392b,color:#fff
+    style R403B fill:#e74c3c,stroke:#c0392b,color:#fff
+    style R403C fill:#e74c3c,stroke:#c0392b,color:#fff
+    style R401A fill:#e74c3c,stroke:#c0392b,color:#fff
+    style R401B fill:#e74c3c,stroke:#c0392b,color:#fff
+    style R413 fill:#e74c3c,stroke:#c0392b,color:#fff
+    style IDENTITY fill:#f39c12,stroke:#d68910,color:#fff
+    style WAC fill:#9b59b6,stroke:#7d3c98,color:#fff
+```
+
 ### Layer 1 — Request authentication
 
 Either NIP-98 or Solid-OIDC DPoP. Both produce:
@@ -181,6 +217,42 @@ with write access only to the pod root and nothing else.
 Both backends are `Send + Sync` and use appropriate synchronisation.
 Custom backends must preserve "either old or new state, never mid-
 write" semantics for `put`.
+
+## Sprint 12 security additions
+
+### Size-capped ACL parsing (CWE-400)
+
+`parse_turtle_acl_with_limit(input, max_bytes)` and
+`parse_jsonld_acl_with_limits(body, max_bytes, max_depth)` reject
+oversized ACL documents before parsing begins. The default cap is 1 MiB
+(`MAX_ACL_BYTES`), tunable via `JSS_MAX_ACL_BYTES`. Rejection returns
+`PodError::PayloadTooLarge`. This matches JSS's `safeJsonParse` pattern
+which limits JSON body parsing to prevent memory-exhaustion DoS.
+
+### `.account` dotfile allowlist entry
+
+The `.account` dotfile is now permitted through the dotfile filter,
+matching JSS commit `32c0db2`. This allows the IdP login endpoint at
+`/.account/…` to serve account-related resources (login, registration,
+password reset). Added to both `DEFAULT_ALLOWED` (struct-based) and
+`STATIC_ALLOWED_DOTFILES` (free-function) allowlists, plus the config
+schema's `default_dotfile_allowlist()`.
+
+### Password-length validation (CWE-521)
+
+The `solid-pod-rs-idp` crate enforces a minimum password length of 8
+characters (matching JSS commit `1feead2`). `validate_password_length()`
+is available as a standalone helper. Enforcement occurs at both
+login (`LoginError::PasswordTooShort → HTTP 400`) and registration
+(`UserStoreError::PasswordTooShort`) time.
+
+### DNS resolution failure blocking
+
+The SSRF guard blocks hosts that fail DNS resolution as defence-in-depth.
+Hostnames under RFC 6761 reserved TLDs (e.g. `.invalid`) are blocked
+rather than silently passed through. This prevents SSRF bypass via
+attacker-controlled DNS records that point to internal IPs after initial
+resolution.
 
 ## What integrators must add
 

@@ -1,6 +1,6 @@
 # solid-pod-rs-idp
 
-**Status: 0.4.0-alpha.1 — Sprint 10 minimum-viable Solid-OIDC provider.**
+**Status: 0.4.0-alpha.2 — Sprint 10–12 Solid-OIDC provider.**
 
 Rust port of the JSS identity provider (`JavaScriptSolidServer/src/idp/*`).
 This crate owns the **protocol** surface; transport framing is the
@@ -45,6 +45,62 @@ before deciding which backend to enable.
 | Row | Why                                  |
 |----:|--------------------------------------|
 |  82 | HTML interaction pages (login / consent / register). JSS bundles Handlebars templates in `src/idp/views.js`. We do not ship a view layer because the right choice depends on the consumer's existing stack (Askama, Leptos, Tera, Yew, or plain `format!`). A minimal Askama adapter on top of this crate is < 300 LOC and should live in a host-app crate where the operator controls the HTML. |
+
+## Authorization code flow
+
+```mermaid
+sequenceDiagram
+    participant App as Client App
+    participant IDP as IdP Provider
+    participant US as UserStore
+    participant SS as SessionStore
+    participant JWKS as JWKS (ES256)
+
+    Note over App: Discovery
+    App->>IDP: GET /.well-known/openid-configuration
+    IDP-->>App: issuer, endpoints, DPoP algs, PKCE
+
+    Note over App: Dynamic Client Registration
+    App->>IDP: POST /idp/reg {redirect_uris}
+    IDP-->>App: {client_id, client_secret}
+
+    Note over App: Authorization
+    App->>IDP: GET /idp/auth?code_challenge=S256(verifier)
+    IDP->>US: find_by_email + verify_password
+    Note over IDP: Password ≥ 8 chars (CWE-521)
+    US-->>IDP: User {webid, id}
+    IDP->>SS: create_session + issue auth_code
+    IDP-->>App: 302 → redirect_uri?code=…
+
+    Note over App: Token Exchange
+    App->>IDP: POST /idp/token {code, code_verifier, DPoP proof}
+    IDP->>SS: consume auth_code (single-use)
+    IDP->>JWKS: sign access token (ES256)
+    Note over IDP: cnf.jkt = DPoP thumbprint
+    Note over IDP: ath = SHA-256(access_token)
+    IDP-->>App: {access_token, token_type: "DPoP"}
+
+    Note over App: Resource Access
+    App->>App: Attach DPoP proof per request
+```
+
+```mermaid
+flowchart LR
+    subgraph cred ["Credentials endpoint (/idp/credentials)"]
+        direction TB
+        RL["Rate limiter<br/>10/min per IP"] --> VAL["Validate email +<br/>password (≥ 8 chars)"]
+        VAL --> AUTH["UserStore lookup<br/>+ argon2id verify"]
+        AUTH --> TOK["Issue access token<br/>ES256-signed JWT"]
+        TOK --> BIND{"DPoP proof<br/>supplied?"}
+        BIND -->|yes| DPOP["token_type: DPoP<br/>cnf.jkt bound"]
+        BIND -->|no| BEARER["token_type: Bearer"]
+    end
+
+    style RL fill:#e74c3c,stroke:#c0392b,color:#fff
+    style VAL fill:#f39c12,stroke:#d68910,color:#fff
+    style AUTH fill:#9b59b6,stroke:#7d3c98,color:#fff
+    style TOK fill:#2ecc71,stroke:#1a9850,color:#fff
+```
 
 ## Minimum-viable flow
 
@@ -114,9 +170,19 @@ should be zero):
 5. **View layer.** JSS bundles Handlebars templates; we don't (see
    row 82 above).
 
+## Sprint 12 changes
+
+- **Password-length validation (CWE-521).** `MIN_PASSWORD_LENGTH = 8`
+  constant and `validate_password_length()` helper mirror JSS commit
+  `1feead2`. `LoginError::PasswordTooShort` variant returns HTTP 400
+  via the Axum binder. `InMemoryUserStore::insert_user` enforces the
+  same minimum at registration time.
+- Re-exported: `validate_password_length`, `MIN_PASSWORD_LENGTH` from
+  crate root.
+
 ## Tests
 
-39 unit tests cover:
+91 unit tests cover:
 
 - Discovery document shape (`webid` in scopes, `none` auth method,
   DPoP algs, PKCE S256, issuer trailing-slash normalisation).
@@ -138,6 +204,9 @@ should be zero):
   when no DPoP thumbprint is passed; `ath_hash` known-value check.
 - Trait hook callability (passkey / schnorr null backends return
   `Unimplemented`).
+- Password-length validation: too-short (7 chars), exactly 8, longer,
+  empty; `MIN_PASSWORD_LENGTH` constant value.
+- Registration rejects short passwords at `insert_user` time.
 
 ## Licence
 

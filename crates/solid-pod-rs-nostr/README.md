@@ -1,15 +1,12 @@
 # solid-pod-rs-nostr
 
-**Status: Reserved stub for v0.5.0. Not yet implemented.**
+**Status: 0.4.0-alpha.2 — functional did:nostr + embedded relay.**
+2,177 LOC, 45 tests. Integrators may depend on this crate today.
 
-This crate is a namespace placeholder in the `solid-pod-rs` workspace.
-`src/lib.rs` contains a doc comment and nothing else. Do not depend on
-it from integrator code — the module graph is empty until v0.5.0.
-
-Note: the did:nostr bidirectional resolver already shipped in Sprint 6
-and lives inside the core library at `interop::did_nostr` (feature
-`did-nostr`). This sibling crate will add the **embedded relay** and
-the Tier 3 DID surface on top of that core resolver.
+Note: the did:nostr bidirectional resolver also ships inside the core
+library at `interop::did_nostr` (feature `did-nostr`). This sibling
+crate adds the **embedded relay** and the Tier 3 DID surface on top
+of that core resolver.
 
 ## Target scope
 

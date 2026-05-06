@@ -62,12 +62,10 @@ Other feature flags (`oidc`, `dpop-replay-cache`, `nip98-schnorr`,
 **AGPL-3.0-only**. See [`LICENSE`](./LICENSE). Operating this binary as a
 network service triggers AGPL §13 source-disclosure obligations.
 
-## v0.5.0 sibling crates
+## Sibling crates (all functional)
 
-The following sibling crates are reserved under the workspace for
-v0.5.0 extensions; they are empty placeholders in v0.4.0:
-
-- [`solid-pod-rs-activitypub`](../solid-pod-rs-activitypub/) — ActivityPub federation
-- [`solid-pod-rs-git`](../solid-pod-rs-git/) — Git HTTP backend
-- [`solid-pod-rs-idp`](../solid-pod-rs-idp/) — OAuth / OIDC IDP
-- [`solid-pod-rs-nostr`](../solid-pod-rs-nostr/) — DID:nostr + embedded Nostr relay
+- [`solid-pod-rs-activitypub`](../solid-pod-rs-activitypub/) — ActivityPub federation (4,453 LOC)
+- [`solid-pod-rs-git`](../solid-pod-rs-git/) — Git HTTP backend (1,685 LOC)
+- [`solid-pod-rs-idp`](../solid-pod-rs-idp/) — Solid-OIDC identity provider (6,160 LOC)
+- [`solid-pod-rs-nostr`](../solid-pod-rs-nostr/) — did:nostr + embedded Nostr relay (2,177 LOC)
+- [`solid-pod-rs-didkey`](../solid-pod-rs-didkey/) — did:key (Ed25519/P-256/secp256k1) + JWT (1,167 LOC)

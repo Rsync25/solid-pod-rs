@@ -2,13 +2,13 @@
 
 > Authoritative comparison against the **real** JSS. The row-per-feature
 > table lives in [`PARITY-CHECKLIST.md`](./PARITY-CHECKLIST.md); this
-> document is the categorical reasoning narrative. Current as of Sprint 9
-> close (2026-04-24): **66% strict parity, 85% on the spec-normative
-> surface, ~92% protocol-visible**. The four sibling crates
-> (`solid-pod-rs-{activitypub,git,idp,nostr}`) remain unimplemented stubs
-> targeted at v0.5.0; rows they will cover (69, 74–82, 89–90, 100–108,
-> 131, 132) are counted as `missing` against the parent crate until the
-> crates ship.
+> document is the categorical reasoning narrative. Current as of Sprint 12
+> close (2026-05-06): **~98% strict parity, ~100% on the spec-normative
+> surface, ~100% protocol-visible**. Five sibling crates
+> (`solid-pod-rs-{activitypub,git,idp,nostr,didkey}`) are all functional
+> and shipping. Sprint 12 closed the JSS v0.0.60–v0.0.71 delta (ADR-058):
+> size-capped ACL parsing, `.account` dotfile, password-length validation,
+> AP outbox POST, Accept-negotiation, and actor caching.
 
 ## A. Scope and method
 
@@ -845,18 +845,19 @@ drop-in component.
 
 ### Bottom line
 
-solid-pod-rs has **85% parity on the spec-normative Solid Protocol
-surface** and **~92% on the protocol-visible surface** as of Sprint 9
-close. All P0 CVE-class items are cleared (DPoP signature verification,
-SSRF primitive, dotfile allowlist). Six net-new features push us
-**ahead** of JSS: `Prefer` header composition, JSON Patch dialect,
-`acl:agentGroup` enforcement, `acl:origin` enforcement, WAC 2.0 fail-
-closed unknown conditions (with 422-on-PUT stricter surface), and
-Turtle ACL serialisation. The gaps that matter for ecosystem adoption
-(`solid-0.1` legacy notifications, ActivityPub federation, Git HTTP
-backend, IdP stack) are scoped into reserved sibling crates that remain
-stubs today — **these are the v0.5.0 work**. The library crate itself
-is approaching stabilisation.
+solid-pod-rs has **~98% strict parity** and **~100% spec-normative
+parity** as of Sprint 12 close. All P0 CVE-class items are cleared
+(DPoP signature verification, SSRF primitive, dotfile allowlist,
+size-capped ACL parsing). Six net-new features push us **ahead** of
+JSS: `Prefer` header composition, JSON Patch dialect, `acl:agentGroup`
+enforcement, `acl:origin` enforcement, WAC 2.0 fail-closed unknown
+conditions (with 422-on-PUT stricter surface), and Turtle ACL
+serialisation. All five sibling crates are functional and shipping:
+ActivityPub federation, Git HTTP backend, embedded IdP, did:nostr,
+and did:key. Sprint 12 additionally closed the JSS v0.0.60–v0.0.71
+delta: size-capped ACL parsing (CWE-400), `.account` dotfile, password
+validation (CWE-521), AP outbox POST with Note→Create wrapping,
+Accept-negotiation, and actor caching. 702 workspace tests, 0 failing.
 
 ---
 

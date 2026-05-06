@@ -1,10 +1,7 @@
 # solid-pod-rs-git
 
-**Status: Reserved stub for v0.5.0. Not yet implemented.**
-
-This crate is a namespace placeholder in the `solid-pod-rs` workspace.
-`src/lib.rs` contains a doc comment and nothing else. Do not depend on
-it from integrator code — the module graph is empty until v0.5.0.
+**Status: 0.4.0-alpha.2 — functional Git HTTP backend.** 1,685 LOC,
+25 tests. Integrators may depend on this crate today.
 
 ## Target scope
 
