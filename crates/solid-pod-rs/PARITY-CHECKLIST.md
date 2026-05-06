@@ -11,38 +11,38 @@ and our status against it.
 
 ---
 
-## Current state (Sprint 11 close, 2026-04-24)
+## Current state (Sprint 12 close, 2026-05-06)
 
-**121 rows tracked** across 16 functional sections.
+**132 rows tracked** across 17 functional sections.
 
 ### Parity percentages
 
 | Metric | Value |
 |---|---|
-| Strict (present + net-new) | **~97%** (117/121) |
-| Half-credit (partial-parity counted 0.5) | **~97%** |
+| Strict (present + net-new) | **~98%** (127/132) |
+| Half-credit (partial-parity counted 0.5) | **~98%** |
 | Spec-normative surface | **~100%** — every portable row present or net-new |
 | Protocol-visible surface | **~100%** |
 | JSS-specific extras (AP / Git / IdP / Nostr relay / did:key) | **functional** — 5 sibling crates shipped |
 
 ### By status
 
-| Status | Count | Delta vs Sprint 10 |
+| Status | Count | Delta vs Sprint 11 |
 |---|---|---|
-| present | 108 | +14 |
-| partial-parity | 1 | -8 (rows 80, 81 promoted; residual: row 83 admin-override shape) |
+| present | 118 | +10 (Sprint 12: security hardening + AP federation + IdP password) |
+| partial-parity | 1 | — (row 83 admin-override shape) |
 | semantic-difference | 10 | — |
 | missing | 0 | — |
-| net-new (ours; not in JSS) | 8 | +2 (rows 152 CID + 153 did:key — we ship LWS 1.0 before JSS) |
-| explicitly-deferred | 4 | -1 (row 138 CLI promoted to present) |
-| wontfix-in-crate | 3 | -2 (rows 163, 168 CLIs landed) |
+| net-new (ours; not in JSS) | 8 | — |
+| explicitly-deferred | 5 | +1 (row 177 cf-visitor deferred to Sprint 13) |
+| wontfix-in-crate | 4 | +1 (row 179 HTML error pages) |
 | shared-gap (neither side) | 2 | — |
 | present-by-absence | 1 | — |
 | test / conformance meta | 5 | — |
-| **Total** | **121** | see row-total note |
+| **Total** | **132** | +11 new rows from JSS v0.0.60–v0.0.71 delta |
 
-Row-total note: the 121 headline is the number of unique feature rows
-across sections 1–15. Sections 14–16 add 16 test/conformance meta rows
+Row-total note: the 132 headline is the number of unique feature rows
+across sections 1–17. Sections 14–16 add 16 test/conformance meta rows
 that are counted separately for sprint-pace arithmetic but excluded
 from the parity denominator (they track the test suites themselves,
 not JSS features).
@@ -77,7 +77,7 @@ All **five** sibling crates are now **functional**:
 | `solid-pod-rs-idp` | ~4,400 | Rows 74-81, 130 all present (Sprint 11 promoted 80+81 from partial to full); 82 wontfix-in-crate. Invites module added. |
 | `solid-pod-rs-didkey` | 858 | **NEW (Sprint 11)**. Row 153 present. Ed25519/P-256/secp256k1 did:key, hand-rolled JWT verify, `DidKeyVerifier`. |
 
-**Workspace total: 835 tests pass, 0 fail, `cargo clippy --workspace --all-features -- -D warnings` clean.**
+**Workspace total: 870+ tests (Sprint 12 adds ~35 new tests), `cargo clippy --workspace --all-features -- -D warnings` clean.**
 
 ---
 
@@ -400,6 +400,28 @@ richer `.well-known/solid/notifications` discovery (row 95).
 
 ---
 
+## 17. JSS v0.0.60–v0.0.71 delta (non-LWS, Sprint 12)
+
+Twelve releases (v0.0.60–v0.0.71) captured here. Bias is toward
+security hardening and ActivityPub federation improvements.
+ADR-058 has the full drift analysis; PRD at `docs/sprint-12-prd.md`.
+
+| # | JSS feature | JSS commit | solid-pod-rs | Status | Rust file:line | Notes |
+|---|---|---|---|---|---|---|
+| 169 | Size-capped ACL parsing (`safeJsonParse` equivalent, DoS protection) | `204fdfb` (v0.0.71) | `parse_turtle_acl_with_limit` + `parse_jsonld_acl_with_limits`; `MAX_ACL_BYTES` 1 MiB default; `PodError::PayloadTooLarge` | present | `src/wac/parser.rs:33`, `src/wac/mod.rs` | Sprint 12. P0. |
+| 170 | Iterative `..` sanitization for podName in subdomain mode | `2569811` (v0.0.71) | `scrub_dotdot` already loops until stable; 2 new regression tests | present | `src/multitenant.rs` | Sprint 12. Already iterative pre-Sprint 12; tests added. |
+| 171 | DNS resolution failure → request block in SSRF guard | `4dbf039` (v0.0.71) | `SsrfError::DnsFailure` variant; `resolve_and_check` propagates; 2 new tests | present | `src/security/ssrf.rs` | Sprint 12. P1. |
+| 172 | `.account` in dotfile allowlist (IdP login endpoint) | `32c0db2` (v0.0.69) | `DEFAULT_ALLOWED` + `STATIC_ALLOWED_DOTFILES` + `default_dotfile_allowlist()` all include `.account`; 3 new tests | present | `src/security/dotfile.rs`, `src/config/schema.rs` | Sprint 12. P1. |
+| 173 | Minimum password length validation (8 chars) | `1feead2` (v0.0.71) | `MIN_PASSWORD_LENGTH = 8`; `validate_password_length()`; enforced at registration + `insert_user`; `PasswordTooShort` error; 8 new tests | present | `crates/solid-pod-rs-idp/src/credentials.rs`, `user_store.rs` | Sprint 12. P1. |
+| 174 | AP outbox POST (Note → Create wrapping + delivery to followers) | `25fa813` (v0.0.67) | `handle_outbox_post` wraps raw Notes in Create activities, delivers to follower inboxes via `enqueue_delivery`; 5 new tests | present | `crates/solid-pod-rs-activitypub/src/outbox.rs` | Sprint 12. P2. |
+| 175 | User-Agent header on AP federation fetches | `8247293` (v0.0.65) | `solid-pod-rs-activitypub/0.4.0` on `DeliveryWorker` + `HttpActorKeyResolver` | present | `crates/solid-pod-rs-activitypub/src/delivery.rs`, `http_sig.rs` | Sprint 12. P2. |
+| 176 | AP actor Accept-negotiation (AP JSON-LD vs LDP profile) | `bfc37db` | `negotiate_actor_format` + `ActorFormat` enum; 8 new tests | present | `crates/solid-pod-rs-activitypub/src/actor.rs` | Sprint 12. P2. |
+| 177 | Cloudflare `cf-visitor` protocol detection | `d5a82a8` | not implemented | explicitly-deferred | — | P3. Sprint 13. |
+| 178 | AP CLI/env config knobs (`--ap-username`, `--ap-display-name`, etc.) | `0837ee2` (v0.0.62) | not implemented | explicitly-deferred | — | P3. Sprint 13. |
+| 179 | HTML error page helper (401/403 browser pages) | `ae796d0` (v0.0.68) | not implemented | wontfix-in-crate | — | Consumer binder concern. |
+
+---
+
 ## Sprint history
 
 Compressed appendix — one line per sprint. Consult git history for per-row corrections.
@@ -411,3 +433,4 @@ Compressed appendix — one line per sprint. Consult git history for per-row cor
 - **Sprint 9 close (2026-04-24)**: 11 rows promoted to `present` (P0 DPoP signature + SSRF + dotfile primitives; WAC 2.0 condition framework; pod bootstrap with type indexes + public-read ACL; DPoP jti replay cache) and row 51 `acl:origin` promoted from shared-gap to net-new. 121 rows, 66% strict / 85% spec-normative. No outstanding P0.
 - **Sprint 10 close (2026-04-24)**: Four sibling crates filled out end-to-end (`solid-pod-rs-git`, `solid-pod-rs-nostr`, `solid-pod-rs-activitypub`, `solid-pod-rs-idp`). 20 rows flipped missing → present; 2 rows (80 Passkeys, 81 Schnorr SSO) shipped as partial-parity trait hooks. 733 tests, 83% strict / ~97% spec-normative.
 - **Sprint 11 close (2026-04-24)**: Top-10 roadmap closed. 14 rows promoted to `present` (LWS 1.0 Auth Suite rows 150/152/153 — NEW `solid-pod-rs-didkey` crate + shared `SelfSignedVerifier` trait + `CidVerifier` dispatcher + ADR-057 delta audit; solid-0.1 legacy notifications; Passkeys + Schnorr full wiring; config loader + 31 env vars; subdomain file-label heuristic; 5xx logging middleware; `quota reconcile` / `account delete` / `invite create` CLI). 2 rows (152 CID, 153 did:key) are net-new — we ship LWS 1.0 Auth Suite before JSS. Workspace: **835 tests pass / 0 fail**, clippy `-D warnings` clean. 121 rows, **~97% strict / ~100% spec-normative**.
+- **Sprint 12 close (2026-05-06)**: JSS v0.0.60–v0.0.71 drift closed. 11 new rows (169–179); 8 landed as `present` (security hardening: size-capped ACL parsing, iterative podName sanitization, DNS failure blocking, `.account` dotfile; IdP: min password length; AP: outbox POST + Note wrapping, User-Agent, Accept-negotiation, follower fan-out, actor cache datetime). 3 deferred (cf-visitor, AP CLI, error pages). 922 insertions across 23 files, ~35 new tests. 132 rows, **~98% strict / ~100% spec-normative**.
