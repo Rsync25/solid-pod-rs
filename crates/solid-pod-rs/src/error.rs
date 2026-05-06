@@ -61,6 +61,13 @@ pub enum PodError {
     #[error("bad request: {0}")]
     BadRequest(String),
 
+    /// Request body exceeds a size limit (HTTP 413 equivalent).
+    ///
+    /// Used by the ACL parsers (`parse_turtle_acl`, `parse_jsonld_acl`) to
+    /// reject oversized documents before parsing begins.
+    #[error("payload too large: {0}")]
+    PayloadTooLarge(String),
+
     /// Sprint 7: pod-level byte quota exceeded. Wraps the detailed
     /// [`crate::quota::QuotaExceeded`] struct so consumers can surface
     /// pod name / used / limit in their HTTP response bodies.

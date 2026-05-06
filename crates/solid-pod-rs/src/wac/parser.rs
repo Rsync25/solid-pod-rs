@@ -21,14 +21,28 @@ use crate::wac::MAX_ACL_BYTES;
 ///
 /// Enforces a byte cap (`JSS_MAX_ACL_BYTES`, default 1 MiB) so an
 /// attacker cannot feed a multi-gigabyte document and DoS the process.
+/// To supply an explicit limit, use [`parse_turtle_acl_with_limit`].
 pub fn parse_turtle_acl(input: &str) -> Result<AclDocument, PodError> {
     let limit = std::env::var("JSS_MAX_ACL_BYTES")
         .ok()
         .and_then(|v| v.parse().ok())
         .unwrap_or(MAX_ACL_BYTES);
-    if input.len() > limit {
-        return Err(PodError::BadRequest(format!(
-            "ACL body exceeds {limit} bytes"
+    parse_turtle_acl_with_limit(input, limit)
+}
+
+/// Parse a Turtle ACL document with a caller-supplied byte limit.
+///
+/// Equivalent to [`parse_turtle_acl`] but accepts the size cap as a
+/// parameter instead of reading from the `JSS_MAX_ACL_BYTES` environment
+/// variable. Returns `PodError::PayloadTooLarge` (HTTP 413 equivalent)
+/// when `input.len() > max_bytes`.
+pub fn parse_turtle_acl_with_limit(
+    input: &str,
+    max_bytes: usize,
+) -> Result<AclDocument, PodError> {
+    if input.len() > max_bytes {
+        return Err(PodError::PayloadTooLarge(format!(
+            "ACL body exceeds {max_bytes} bytes"
         )));
     }
 
@@ -485,4 +499,61 @@ fn expand_curie_or_iri(tok: &str, prefixes: &HashMap<String, String>) -> String 
         }
     }
     tok.to_string()
+}
+
+// ---------------------------------------------------------------------------
+// Unit tests — size-capped parsing (Sprint 12 security hardening).
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Valid minimal Turtle ACL for round-trip sanity.
+    const TINY_ACL: &str = r#"
+        @prefix acl: <http://www.w3.org/ns/auth/acl#> .
+        @prefix foaf: <http://xmlns.com/foaf/0.1/> .
+
+        <#public> a acl:Authorization ;
+            acl:agentClass foaf:Agent ;
+            acl:accessTo </> ;
+            acl:mode acl:Read .
+    "#;
+
+    #[test]
+    fn parse_turtle_acl_with_limit_accepts_small_doc() {
+        // A generous limit should succeed.
+        let doc = parse_turtle_acl_with_limit(TINY_ACL, 1_048_576).unwrap();
+        assert!(doc.graph.is_some());
+    }
+
+    #[test]
+    fn parse_turtle_acl_with_limit_rejects_oversized_doc() {
+        // Set limit to 10 bytes — well under the document size.
+        let err = parse_turtle_acl_with_limit(TINY_ACL, 10).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("payload too large") || msg.contains("exceeds"),
+            "error should mention size: {msg}"
+        );
+    }
+
+    #[test]
+    fn parse_turtle_acl_with_limit_boundary() {
+        // Exactly at the boundary: len == limit should succeed.
+        let doc_str = "a".repeat(100);
+        // This won't be valid Turtle, but the size check passes and the
+        // parser returns an empty-graph document (it is forgiving).
+        let result = parse_turtle_acl_with_limit(&doc_str, 100);
+        assert!(result.is_ok(), "exactly at limit should not reject");
+
+        // One byte over the boundary should be rejected.
+        let doc_str_over = "a".repeat(101);
+        assert!(parse_turtle_acl_with_limit(&doc_str_over, 100).is_err());
+    }
+
+    #[test]
+    fn default_limit_is_one_mib() {
+        assert_eq!(MAX_ACL_BYTES, 1_048_576);
+    }
 }

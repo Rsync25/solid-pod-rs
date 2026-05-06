@@ -730,4 +730,55 @@ mod tests {
             other => panic!("expected MissingHost for file URL, got {other:?}"),
         }
     }
+
+    // ----- Sprint 12: DNS resolution failure blocks request ----------------
+    //
+    // JSS commit 4dbf039: when DNS resolution fails the request must be
+    // blocked — never fall through to a permissive default.
+
+    #[tokio::test]
+    async fn dns_failure_blocks_request() {
+        // Use an unresolvable hostname (RFC 6761 §6.4: `.invalid` is
+        // guaranteed to never resolve).
+        let result = resolve_and_check("this-host-does-not-exist.invalid").await;
+        match result {
+            Err(SsrfError::DnsFailure { host, .. }) => {
+                assert_eq!(host, "this-host-does-not-exist.invalid");
+            }
+            Err(SsrfError::NoAddresses { host, .. }) => {
+                // Some resolvers return empty results instead of an
+                // error — both are acceptable block outcomes.
+                assert_eq!(host, "this-host-does-not-exist.invalid");
+            }
+            Err(other) => panic!(
+                "expected DnsFailure or NoAddresses for unresolvable host, got {other:?}"
+            ),
+            Ok(ip) => panic!(
+                "expected DNS failure for unresolvable host, got Ok({ip})"
+            ),
+        }
+    }
+
+    #[tokio::test]
+    async fn policy_dns_failure_blocks_request() {
+        // Same test through the SsrfPolicy aggregate.
+        let policy = SsrfPolicy::new();
+        let url = Url::parse("https://this-host-does-not-exist.invalid/resource")
+            .expect("valid URL");
+        let result = policy.resolve_and_check(&url).await;
+        match result {
+            Err(SsrfError::DnsFailure { host, .. }) => {
+                assert!(host.contains("this-host-does-not-exist.invalid"));
+            }
+            Err(SsrfError::NoAddresses { host, .. }) => {
+                assert!(host.contains("this-host-does-not-exist.invalid"));
+            }
+            Err(other) => panic!(
+                "expected DnsFailure/NoAddresses through policy, got {other:?}"
+            ),
+            Ok(ip) => panic!(
+                "expected DNS failure through policy, got Ok({ip})"
+            ),
+        }
+    }
 }

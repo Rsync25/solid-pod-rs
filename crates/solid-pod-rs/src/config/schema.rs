@@ -303,7 +303,12 @@ impl Default for SecurityConfig {
 }
 
 fn default_dotfile_allowlist() -> Vec<String> {
-    vec![".acl".to_string(), ".meta".to_string()]
+    vec![
+        ".acl".to_string(),
+        ".meta".to_string(),
+        // JSS commit 32c0db2: allow `.account` for IdP login.
+        ".account".to_string(),
+    ]
 }
 
 // ---------------------------------------------------------------------------

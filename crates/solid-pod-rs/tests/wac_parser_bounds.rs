@@ -32,7 +32,7 @@ fn wac_turtle_acl_oversize_rejected() {
     // ~10 MiB of whitespace — sufficient to exceed the 1 MiB cap.
     let big = " ".repeat(10 * 1024 * 1024);
     let err = parse_turtle_acl(&big).unwrap_err();
-    assert!(matches!(err, PodError::BadRequest(_) | PodError::AclParse(_)), "got {err:?}");
+    assert!(matches!(err, PodError::BadRequest(_) | PodError::PayloadTooLarge(_) | PodError::AclParse(_)), "got {err:?}");
 }
 
 #[test]

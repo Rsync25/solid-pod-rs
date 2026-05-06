@@ -74,21 +74,36 @@ fn check_json_depth(body: &[u8], max: usize) -> Result<(), PodError> {
 ///
 /// The resolver in [`StorageAclResolver`] routes through this helper so
 /// fuzzed or malicious ACLs are rejected before `serde_json` is invoked.
+/// To supply explicit limits, use [`parse_jsonld_acl_with_limits`].
 pub fn parse_jsonld_acl(body: &[u8]) -> Result<AclDocument, PodError> {
     let limit = std::env::var("JSS_MAX_ACL_BYTES")
         .ok()
         .and_then(|v| v.parse().ok())
         .unwrap_or(MAX_ACL_BYTES);
-    if body.len() > limit {
-        return Err(PodError::BadRequest(format!(
-            "ACL body exceeds {limit} bytes"
-        )));
-    }
     let depth_limit = std::env::var("JSS_MAX_ACL_JSON_DEPTH")
         .ok()
         .and_then(|v| v.parse().ok())
         .unwrap_or(MAX_ACL_JSON_DEPTH);
-    check_json_depth(body, depth_limit)?;
+    parse_jsonld_acl_with_limits(body, limit, depth_limit)
+}
+
+/// Parse a JSON-LD ACL body with caller-supplied byte and depth limits.
+///
+/// Equivalent to [`parse_jsonld_acl`] but accepts limits as parameters
+/// instead of reading from environment variables. Returns
+/// `PodError::PayloadTooLarge` (HTTP 413 equivalent) when
+/// `body.len() > max_bytes`.
+pub fn parse_jsonld_acl_with_limits(
+    body: &[u8],
+    max_bytes: usize,
+    max_depth: usize,
+) -> Result<AclDocument, PodError> {
+    if body.len() > max_bytes {
+        return Err(PodError::PayloadTooLarge(format!(
+            "ACL body exceeds {max_bytes} bytes"
+        )));
+    }
+    check_json_depth(body, max_depth)?;
     serde_json::from_slice::<AclDocument>(body)
         .map_err(|e| PodError::AclParse(format!("JSON-LD ACL parse: {e}")))
 }
@@ -121,7 +136,7 @@ pub use evaluator::{
 };
 pub use issuer::{IssuerConditionBody, IssuerConditionEvaluator};
 pub use origin::{check_origin, extract_origin_patterns, Origin, OriginDecision, OriginPattern};
-pub use parser::parse_turtle_acl;
+pub use parser::{parse_turtle_acl, parse_turtle_acl_with_limit};
 pub use resolver::{AclResolver, StorageAclResolver};
 pub use serializer::serialize_turtle_acl;
 
@@ -382,5 +397,26 @@ mod tests {
         assert!(out.contains("@prefix acl:"));
         assert!(out.contains("acl:Authorization"));
         assert!(out.contains("acl:mode"));
+    }
+
+    // ----- Sprint 12: parameterised JSON-LD size cap ----------------------
+
+    #[test]
+    fn jsonld_acl_with_limits_rejects_oversized() {
+        let body = b"{\"@context\": \"https://www.w3.org/ns/auth/acl\"}";
+        let err = parse_jsonld_acl_with_limits(body, 10, 32).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("payload too large") || msg.contains("exceeds"),
+            "oversized JSON-LD should be rejected: {msg}"
+        );
+    }
+
+    #[test]
+    fn jsonld_acl_with_limits_accepts_within_bounds() {
+        // Minimal valid JSON-LD ACL (empty graph).
+        let body = b"{}";
+        let doc = parse_jsonld_acl_with_limits(body, 1024, 32).unwrap();
+        assert!(doc.graph.is_none());
     }
 }

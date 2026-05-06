@@ -45,14 +45,18 @@ impl<S: Storage> AclResolver for StorageAclResolver<S> {
             };
             if let Ok((body, meta)) = self.storage.get(&acl_key).await {
                 // JSON-LD first (with bounded parser). A body that
-                // exceeds byte or depth caps returns BadRequest and
-                // bubbles up so the caller can reject with 400.
+                // exceeds byte or depth caps returns BadRequest or
+                // PayloadTooLarge and bubbles up so the caller can
+                // reject with 400/413.
                 match parse_jsonld_acl(&body) {
                     Ok(doc) => return Ok(Some(doc)),
                     Err(PodError::BadRequest(_)) => {
                         return Err(PodError::BadRequest(
                             "ACL document exceeds bounds".into(),
                         ));
+                    }
+                    Err(PodError::PayloadTooLarge(msg)) => {
+                        return Err(PodError::PayloadTooLarge(msg));
                     }
                     Err(_) => {}
                 }

@@ -20,8 +20,8 @@ use crate::metrics::SecurityMetrics;
 pub const ENV_DOTFILE_ALLOWLIST: &str = "DOTFILE_ALLOWLIST";
 
 /// Default allowlist entries. Matches JSS behaviour for standard Solid
-/// metadata sidecars.
-pub const DEFAULT_ALLOWED: &[&str] = &[".acl", ".meta"];
+/// metadata sidecars and the IdP login endpoint (JSS commit 32c0db2).
+pub const DEFAULT_ALLOWED: &[&str] = &[".acl", ".meta", ".account"];
 
 /// Reason a path was rejected.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Error)]
@@ -61,7 +61,7 @@ impl DotfileAllowlist {
         }
     }
 
-    /// Construct the default allowlist: `.acl`, `.meta`.
+    /// Construct the default allowlist: `.acl`, `.meta`, `.account`.
     pub fn with_defaults() -> Self {
         Self {
             allowed: DEFAULT_ALLOWED.iter().map(|s| (*s).to_string()).collect(),
@@ -186,6 +186,11 @@ const STATIC_ALLOWED_DOTFILES: &[&str] = &[
     // the two rules above but spelled out here so the match is O(1)
     // without a trailing-suffix check on the main path.
     ".acl.meta",
+    // `.account` — IdP login endpoint. JSS commit 32c0db2 allows this
+    // through the dotfile filter so that the local identity provider can
+    // serve account-related resources (login, registration, password
+    // reset) at `/.account/…`.
+    ".account",
 ];
 
 /// Decide whether `path` may be served, purely by inspecting its
@@ -404,5 +409,44 @@ mod tests {
             is_path_allowed("/a/../b"),
             Err(DotfilePathError::ParentTraversal(_))
         ));
+    }
+
+    // ----- Sprint 12: `.account` in dotfile allowlist (JSS 32c0db2) ------
+
+    #[test]
+    fn default_permits_account() {
+        let al = DotfileAllowlist::default();
+        assert!(
+            al.is_allowed(&PathBuf::from("/.account")),
+            ".account must be on default allowlist"
+        );
+        assert!(
+            al.is_allowed(&PathBuf::from("/pod/.account")),
+            ".account nested under pod must pass"
+        );
+    }
+
+    #[test]
+    fn allows_account_path_free_function() {
+        assert!(
+            is_path_allowed("/.account").is_ok(),
+            ".account must pass the free-function check"
+        );
+        assert!(
+            is_path_allowed("/.account/login").is_ok(),
+            ".account subtree must pass"
+        );
+        assert!(
+            is_path_allowed("/pod/.account/register").is_ok(),
+            ".account under pod must pass"
+        );
+    }
+
+    #[test]
+    fn account_in_default_allowed_constant() {
+        assert!(
+            DEFAULT_ALLOWED.contains(&".account"),
+            "DEFAULT_ALLOWED must include .account"
+        );
     }
 }

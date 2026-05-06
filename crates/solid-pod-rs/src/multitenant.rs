@@ -216,6 +216,37 @@ mod tests {
         assert_eq!(scrub_dotdot("safe"), "safe");
     }
 
+    /// Sprint 12 security hardening (JSS commit 2569811): the bypass
+    /// `"....//foo"` must NOT produce `"../foo"` — iterative removal
+    /// collapses all `..` sequences so the final result is `"//foo"`.
+    #[test]
+    fn scrub_dotdot_iterative_defeats_bypass() {
+        // `....//foo` → single pass yields `..//foo` (still has `..`);
+        // iterative pass yields `//foo` (all `..` removed).
+        let result = scrub_dotdot("....//foo");
+        assert!(
+            !result.contains(".."),
+            "iterative scrub must eliminate all `..`: got {result:?}"
+        );
+        assert_eq!(result, "//foo");
+    }
+
+    /// Verify the full subdomain resolver rejects the bypass attempt.
+    /// `"....//foo"` as a subdomain label, after scrubbing, contains `/`
+    /// and therefore falls back to path mode (pod: None).
+    #[test]
+    fn subdomain_rejects_dotdot_bypass_as_pod() {
+        let r = SubdomainResolver {
+            base_domain: "pods.example.com".into(),
+        };
+        // Host header: `....//foo.pods.example.com`
+        let got = r.resolve("....//foo.pods.example.com", "/index.html");
+        assert_eq!(
+            got.pod, None,
+            "bypass attempt must not produce a pod name"
+        );
+    }
+
     #[test]
     fn path_resolver_ignores_host() {
         let r = PathResolver;
