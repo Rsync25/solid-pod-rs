@@ -29,8 +29,7 @@
 //!
 //! ## Attribution
 //!
-//! Extracted from `community-forum-rs/crates/pod-worker`. See NOTICE
-//! for provenance.
+//! Rust port of JavaScriptSolidServer. See NOTICE for provenance.
 
 #![deny(unsafe_code)]
 #![warn(rust_2018_idioms)]

@@ -75,8 +75,7 @@ deeper dive.
   `serde`. Solid-OIDC needs `openidconnect` + `jsonwebtoken` +
   their transitive deps (jsonrpc shim, base64 variants, pem parsers).
   A NIP-98-only pod doesn't pay for OIDC.
-- The crate's origin (`community-forum-rs`) is a Nostr-native app.
-  NIP-98 was the primary auth path from day one. OIDC is there for
+- NIP-98 was the primary auth path from day one. OIDC is there for
   interop with existing Solid clients.
 - Both protocols solve the same problem (request-bound auth). Running
   both in parallel is routine; running only one is the common case.

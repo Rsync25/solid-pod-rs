@@ -494,10 +494,6 @@ JavaScriptSolidServer (Node.js, AGPL-3.0)
         │
         ├── reference implementation
         │
-community-forum-rs/pod-worker (Rust, AGPL-3.0)
-        │
-        ├── Cloudflare Workers port; seeded LDP + WAC + NIP-98
-        │
 solid-pod-rs (Rust, AGPL-3.0)   ← you are here
 ```
 

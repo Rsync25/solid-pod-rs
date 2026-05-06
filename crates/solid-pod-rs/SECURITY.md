@@ -25,7 +25,7 @@ Please do NOT open a public issue for suspected vulnerabilities.
 
 In scope: the `solid-pod-rs` crate, its default features, its documented public API, its CI/CD configuration.
 
-Out of scope: downstream consumers' integrations (VisionClaw, community-forum-rs, etc.) — report those directly to those projects.
+Out of scope: downstream consumers' integrations — report those directly to those projects.
 
 ## Cryptographic verification
 

@@ -51,8 +51,7 @@ Practical implications:
 
 ## Attribution
 
-This crate originated as an extraction from
-`community-forum-rs/crates/pod-worker` and inherits its AGPL-3.0-only
-licence from the JavaScriptSolidServer ecosystem covenant (see
-`NOTICE` for the full provenance chain). Keep attribution intact in
-`NOTICE` when making derivative changes.
+This crate is a Rust port of JavaScriptSolidServer and inherits its
+AGPL-3.0-only licence from the JSS ecosystem covenant (see `NOTICE`
+for the full provenance chain). Keep attribution intact in `NOTICE`
+when making derivative changes.
